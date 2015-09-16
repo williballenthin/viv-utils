@@ -13,7 +13,8 @@ requirements = [
     "argparse",
     "pefile",
     "ipython",
-    "vivisect"
+    "vivisect",
+    "intervaltree",
 ]
 
 setup(
