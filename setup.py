@@ -32,6 +32,8 @@ setup(
     package_data={'viv_utils': ['data/*.py']},
     entry_points={
         "console_scripts": [
+            "trace_function_emulation=viv_utils.scripts.trace_function_emulation:main",
+            "get_function_args=viv_utils.scripts.get_function_args:main"
         ]
     },
     include_package_data=True,
