@@ -108,6 +108,12 @@ class EmulatorDriver(object):
         """ naively read ascii string """
         return self._emu.readMemory(self._emu.getStackCounter() + offset, maxlength).partition("\x00")[0]
 
+    def getRegister(self, reg):
+        return self._emu.getRegister(reg)
+
+    def setRegister(self, reg, value):
+        return self._emu.setRegister(reg, value)
+
 
 class DebuggerEmulatorDriver(EmulatorDriver):
     """
