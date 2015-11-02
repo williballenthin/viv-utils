@@ -13,6 +13,10 @@ class UnsupportedFunction(Exception):
     pass
 
 
+class InstructionRangeExceededError(Exception):
+    pass
+
+
 class Hook(object):
     def __init__(self):
         super(Hook, self).__init__()
