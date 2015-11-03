@@ -66,7 +66,7 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor):
         pass
 
     def logAnomaly(self, *args, **kwargs):
-        self._logger.warning("error: %s %s", args, kwargs)
+        self._logger.warning("error: args:%s kwargs:%s", args, kwargs)
 
 
 class EmulatorDriver(object):
@@ -127,6 +127,9 @@ class EmulatorDriver(object):
 
     def setRegister(self, reg, value):
         return self._emu.setRegister(reg, value)
+
+    def setVivTaint(self, name, libname):
+        return self._emu.setVivTaint(name, libname)
 
 
 class DebuggerEmulatorDriver(EmulatorDriver):
