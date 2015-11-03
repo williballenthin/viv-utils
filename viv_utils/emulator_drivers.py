@@ -63,6 +63,8 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor):
 
     def apicall(self, emu, op, pc, api, argv):
         #self._logger.debug("apicall: %s %s %s %s", op, pc, api, argv)
+        # if non-None is returned, then it signals that the API call was handled
+        #   and this function *must* handle cleaning up the stack
         pass
 
     def logAnomaly(self, *args, **kwargs):
@@ -273,12 +275,6 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
         }
         return vg_path.newPathNode(parent=parent, **props)
 
-    def getEmuSnap(self):
-        return self._emu.getEmuSnap()
-
-    def setEmuSnap(self, snap):
-        self._emu.setEmuSnap(snap)
-
     def _runFunction(self, funcva, stopva=None, maxhit=None, maxloop=None, strictops=True, func_only=True):
         """
         :param func_only: is this emulator meant to stay in one function scope?
@@ -311,6 +307,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                 if starteip == stopva:
                     return
 
+
                 # Check straight hit count...
                 if maxhit != None:
                     h = hits.get(starteip, 0)
@@ -326,7 +323,9 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
 
                 try:
                     op = emu.parseOpcode(starteip)
+                    nextpc = starteip + len(op)
                     self.op = op
+
                     for mon in self._monitors:
                         mon.prehook(emu, op, starteip)
 
@@ -341,41 +340,76 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
 
                     iscall = bool(op.iflags & v_envi.IF_CALL)
                     if iscall:
+
+                        is_call_target_resolved = self.getStackValue(0x0) == nextpc 
+
                         api = emu.getCallApi(endeip)
                         rtype, rname, convname, callname, funcargs = api
                         callconv = emu.getCallingConvention(convname)
                         argv = callconv.getCallArgs(emu, len(funcargs))
 
-                        ret = None
+                        # print("API call: " + callname)
+
+                        # attempt to invoke hooks to handle function calls.
+                        # priority:
+                        #   - monitor.apicall handler
+                        #   - driver.hooks
+                        #   - emu.hooks (default vivisect hooks)
+                        
+                        call_handled = False
                         for mon in self._monitors:
                             try:
                                 r = mon.apicall(emu, op, endeip, api, argv)
-                                if ret is None and r is not None:
+                                if r is not None:
                                     # take the first result
                                     # not ideal, but works in the common case
-                                    ret = r
+                                    self._logger.debug("monitor hook handled call: %s", callname)
+                                    call_handled = True
+                                    break
                             except Exception, e:
+                                print("apicall error: %s" % (e))
                                 mon.logAnomaly(emu, endeip, 
                                         "%s.apicall failed: %s" % (mon.__class__.__name__, e))
 
-                        if ret is None:
+                        if not call_handled:
                             for hook in self._hooks:
                                 try:
                                     ret = hook.hook(callname, emu, callconv, api, argv)
-                                    break
+                                    # take the first result
+                                    # not ideal, but works in the common case
+                                    if ret is not None:
+                                        self._logger.debug("driver hook handled call: %s", callname)
+                                        call_handled = True
+                                        break
                                 except UnsupportedFunction:
                                     continue
 
-                        if ret is None and callname in emu.hooks:
+                        if not call_handled and callname in emu.hooks:
                             hook = emu.hooks.get(callname)
-                            ret = hook( self, callconv, api, argv )
+                            hook(self, callconv, api, argv)
+                            self._logger.debug("emu hook handled call: %s", callname)
+                            call_handled = True
 
-                        if func_only:
-                            if ret is None:
+                        if call_handled:
+                            # some hook handled the call,
+                            # so make sure PC is at the next instruction
+                            emu.setProgramCounter(starteip + len(op))
+                        elif not is_call_target_resolved:
+                            # vivisect-specific behavior: when the call instruction does not
+                            #   emulate correct (like when the function target is not correctly mapped),
+                            #   the return pointer is not pushed,
+                            # so jump directly to next instruction
+                            emu.setProgramCounter(starteip + len(op))
+                        else:
+                            # if no hooks handled the call, but we still want to continue...
+                            if func_only:
+                                # try to emulate a return
                                 ret = emu.setVivTaint('apicall', (op, endeip, api, argv))
                                 callconv.execCallReturn( emu, ret, len(funcargs) )
-                        else:
-                            emu.setProgramCounter(starteip + len(op))
+                            else:
+                                # or, keep emulating into new function
+                                pass
+
                     else:
                         # If it wasn't a call, check for branches, if so, add them to
                         # the todo list and go around again...
