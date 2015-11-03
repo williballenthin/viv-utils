@@ -77,6 +77,10 @@ class EmulatorDriver(object):
     def add_monitor(self, mon):
         self._monitors.append(mon)
 
+    def remove_monitor(self, mon):
+        if mon in self._monitors:
+            del self._monitors[self._monitors.index(mon)]
+
     def add_hook(self, hook):
         self._hooks.append(hook)
 
