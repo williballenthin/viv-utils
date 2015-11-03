@@ -20,7 +20,7 @@ class InstructionRangeExceededError(Exception):
         self.eip = eip
 
     def __str__(self):
-        self.d("InstructionRangeExceededError(ended at instruction 0x%08X)" % eip)
+        return "InstructionRangeExceededError(ended at instruction 0x%08X)" % self.eip
 
 
 class Hook(object):
