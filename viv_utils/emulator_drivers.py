@@ -3,7 +3,6 @@ import logging
 import vivisect
 import envi as v_envi
 import visgraph.pathcore as vg_path
-import viv_utils
 
 
 class StopEmulation(Exception):
@@ -14,12 +13,15 @@ class UnsupportedFunction(Exception):
     pass
 
 
-class InstructionRangeExceededError(Exception, viv_utils.LoggingObject):
+class InstructionRangeExceededError(Exception):
 
     def __init__(self, eip):
-        Exception.__init__(self)
-        viv_utils.LoggingObject.__init__(self)
-        self.d("Instruction range exceeded, ended at instruction 0x%08X", eip)
+        super(InstructionRangeExceededError, self).__init__()
+        self.eip = eip
+
+    def __str__(self):
+        self.d("InstructionRangeExceededError(ended at instruction 0x%08X)" % eip)
+
 
 class Hook(object):
     def __init__(self):
