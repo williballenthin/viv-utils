@@ -3,6 +3,7 @@ import logging
 import vivisect
 import envi as v_envi
 import visgraph.pathcore as vg_path
+import viv_utils
 
 
 class StopEmulation(Exception):
@@ -13,9 +14,12 @@ class UnsupportedFunction(Exception):
     pass
 
 
-class InstructionRangeExceededError(Exception):
-    pass
+class InstructionRangeExceededError(Exception, viv_utils.LoggingObject):
 
+    def __init__(self, eip):
+        Exception.__init__(self)
+        viv_utils.LoggingObject.__init__(self)
+        self.d("Instruction range exceeded, ended at instruction 0x%08X", eip)
 
 class Hook(object):
     def __init__(self):
@@ -202,7 +206,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
                 return
             else:
                 self.stepi()
-        raise InstructionRangeExceededError()
+        raise InstructionRangeExceededError(eip)
 
     def runToReturn(self, max_instruction_count=1000):
         """ stepo until ret instruction """
@@ -216,7 +220,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
                 return
             else:
                 self.stepo()
-        raise InstructionRangeExceededError()
+        raise InstructionRangeExceededError(eip)
 
     def runToVa(self, va, max_instruction_count=1000):
         """ stepi until ret instruction """
@@ -229,7 +233,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
                 return
             else:
                 self.stepi()
-        raise InstructionRangeExceededError()
+        raise InstructionRangeExceededError(eip)
 
     def addBreakpoint(self, va):
         self._bps.add(va)
