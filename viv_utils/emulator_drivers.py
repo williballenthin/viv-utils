@@ -4,6 +4,8 @@ import vivisect
 import envi as v_envi
 import visgraph.pathcore as vg_path
 
+from . import LoggingObject
+
 
 class StopEmulation(Exception):
     pass
@@ -15,12 +17,12 @@ class UnsupportedFunction(Exception):
 
 class InstructionRangeExceededError(Exception):
 
-    def __init__(self, eip):
+    def __init__(self, pc):
         super(InstructionRangeExceededError, self).__init__()
-        self.eip = eip
+        self.pc = pc
 
     def __str__(self):
-        return "InstructionRangeExceededError(ended at instruction 0x%08X)" % self.eip
+        return "InstructionRangeExceededError(ended at instruction 0x%08X)" % self.pc
 
 
 class Hook(object):
@@ -33,9 +35,10 @@ class Hook(object):
         raise UnsupportedFunction()
 
 
-class Monitor(vivisect.impemu.monitor.EmulationMonitor):
+class Monitor(vivisect.impemu.monitor.EmulationMonitor, LoggingObject):
     def __init__(self, vw):
         vivisect.impemu.monitor.EmulationMonitor.__init__(self)
+        LoggingObject.__init__(self)
         self._vw = vw
         self._logger = logging.getLogger("Monitor")
 
@@ -47,16 +50,16 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor):
         for i in xrange(num):
             self._logger.debug("stack: ESP + %s: %s", hex(4 * i), hex(self.getStackValue(emu, 4 * i)))
 
-    def prehook(self, emu, op, starteip):
+    def prehook(self, emu, op, startpc):
         pass
         #self._logger.debug("======================")
-        #self._logger.debug("prehook: %s: %s", hex(starteip), op)
+        #self._logger.debug("prehook: %s: %s", hex(startpc), op)
         #self._logger.debug("eflags: %s", bin(emu.getRegisterByName("eflags")))
         #self._logger.debug("PF: %s", emu.getFlag(EFLAGS_PF))
         #self.dumpStack(emu, 4)
         #self._logger.debug("----------------------")
 
-    def posthook(self, emu, op, endeip):
+    def posthook(self, emu, op, endpc):
         #self.dumpStack(emu, 4)
         #self._logger.debug("  EBX: %s", hex(emu.getRegisterByName("ebx")))
         pass
@@ -98,12 +101,12 @@ class EmulatorDriver(object):
     def isRet(self, op):
         return bool(op.iflags & v_envi.IF_RET)
 
-    def isHooked(self, eip, op):
+    def isHooked(self, pc, op):
         if not self.isCall(op):
             raise RuntimeError("not a call")
 
         emu = self._emu
-        api = emu.getCallApi(eip)
+        api = emu.getCallApi(pc)
         rtype, rname, convname, callname, funcargs = api
         callconv = emu.getCallingConvention(convname)
         argv = callconv.getCallArgs(emu, len(funcargs))
@@ -127,6 +130,105 @@ class EmulatorDriver(object):
     def __getattr__(self, name):
         # look just like an emulator
         return getattr(self._emu, name)
+
+    def handleCall(self, pc, op, avoid_calls=False):
+        """
+        for the given call:
+          if its hooked, do the hook, and pc goes to next instruction
+          else, 
+            if avoid_calls is false, step into the call, and pc is at first instruction of function
+            if avoid_calls is true, step over the call, as best as possible
+        
+        return True if stepped into the function, False if the function is completely handled
+        """
+        if not self.isCall(op):
+            raise RuntimeError("not a call")
+
+        emu = self._emu
+        api = emu.getCallApi(pc)
+        rtype, rname, convname, callname, funcargs = api
+        callconv = emu.getCallingConvention(convname)
+        argv = callconv.getCallArgs(emu, len(funcargs))
+
+        targetOpnd = op.getOperands()[0]
+        # want to resolve imports, which are currently broken in vivisect?
+        # viv emulator lazily gets the api after jumping to random memory:
+        #   ret = emu.setVivTaint('apicall', (op, endpc, api, argv))
+        #   callconv.execCallReturn( emu, ret, len(funcargs) )
+        if targetOpnd.isDeref():
+            # maybe call through IAT, like: call [0x10008050]
+            # fetch the "0x10008050"
+            target = targetOpnd.getOperAddr(op, emu)
+            # ensure is import
+            if emu.vw.isLocType(target, vivisect.const.LOC_IMPORT):
+                # get taint value
+                import struct
+                target = struct.unpack("<I", emu.readMemory(target, 4))[0]  # TODO: 32bit only????
+                api = emu.getCallApi(target)
+                rtype, rname, convname, callname, funcargs = api
+                callconv = emu.getCallingConvention(convname)
+                argv = callconv.getCallArgs(emu, len(funcargs))
+        else:
+            # like: call 0x10008050, probably not an import
+            target = targetOpnd.getOperValue(op, emu)
+
+        emu.executeOpcode(op)
+        endpc = emu.getProgramCounter()
+
+        # attempt to invoke hooks to handle function calls.
+        # priority:
+        #   - monitor.apicall handler
+        #   - driver.hooks
+        #   - emu.hooks (default vivisect hooks)
+
+        call_handled = False
+        for mon in self._monitors:
+            try:
+                r = mon.apicall(emu, op, endpc, api, argv)
+                if r is not None:
+                    # take the first result
+                    # not ideal, but works in the common case
+                    self._logger.debug("monitor hook handled call: %s", callname)
+                    call_handled = True
+                    break
+            except Exception, e:
+                print("apicall error: %s" % (e))
+                mon.logAnomaly(emu, endpc, 
+                        "%s.apicall failed: %s" % (mon.__class__.__name__, e))
+
+        if not call_handled:
+            for hook in self._hooks:
+                try:
+                    ret = hook.hook(callname, emu, callconv, api, argv)
+                    # take the first result
+                    # not ideal, but works in the common case
+                    if ret is not None:
+                        self._logger.debug("driver hook handled call: %s", callname)
+                        call_handled = True
+                        break
+                except UnsupportedFunction:
+                    continue
+
+        if not call_handled and callname in emu.hooks:
+            hook = emu.hooks.get(callname)
+            hook(self, callconv, api, argv)
+            self._logger.debug("emu hook handled call: %s", callname)
+            call_handled = True
+
+        if call_handled:
+            # some hook handled the call,
+            # so make sure PC is at the next instruction
+            emu.setProgramCounter(pc + len(op))
+            return False
+        elif avoid_calls or emu.getVivTaint(endpc):
+            # jump over the call instruction
+            # return value --> 0
+            callconv.execCallReturn(emu, 0, len(funcargs))
+            emu.setProgramCounter(pc + len(op))
+            return False
+        elif not avoid_calls:
+            # op already emulated, just return
+            return True
     
 
 class DebuggerEmulatorDriver(EmulatorDriver):
@@ -138,57 +240,22 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         super(DebuggerEmulatorDriver, self).__init__(emu)
         self._bps = set([])
 
-    def handleCall(self, eip, op, avoid_calls=False):
-        """
-        for the given call:
-          if its hooked, do the hook, and pc goes to next instruction
-          else, step into the call, and pc is at first instruction of function
-        """
-        if not self.isCall(op):
-            raise RuntimeError("not a call")
-
-        emu = self._emu
-        api = emu.getCallApi(eip)
-        rtype, rname, convname, callname, funcargs = api
-        callconv = emu.getCallingConvention(convname)
-        argv = callconv.getCallArgs(emu, len(funcargs))
-
-        for mon in self._monitors:
-            mon.apicall(emu, op, eip, api, argv)
-
-        if self.isCall(op):
-            # TODO: update hooks logic here
-            if self.isHooked(eip, op):
-                hook = emu.hooks.get(callname)
-                hook(emu, callconv, api, argv)
-                emu.setProgramCounter(eip+len(op))
-            else:
-                if avoid_calls:
-                    # jump over the call instruction
-                    # return value --> 0
-                    callconv.execCallReturn(emu, 0, len(funcargs))
-                    emu.setProgramCounter(eip + len(op))
-                else:
-                    emu.executeOpcode(op)
-        else:
-            emu.executeOpcode(op)
-
     def step(self, avoid_calls):
         emu = self._emu
-        starteip = emu.getProgramCounter()
-        op = emu.parseOpcode(starteip)
+        startpc = emu.getProgramCounter()
+        op = emu.parseOpcode(startpc)
         for mon in self._monitors:
-            mon.prehook(emu, op, starteip)
+            mon.prehook(emu, op, startpc)
 
         if self.isCall(op):
-            self.handleCall(starteip, op, avoid_calls=avoid_calls)
+            self.handleCall(startpc, op, avoid_calls=avoid_calls)
         else:
             emu.executeOpcode(op)
 
-        endeip = emu.getProgramCounter()
+        endpc = emu.getProgramCounter()
 
         for mon in self._monitors:
-            mon.posthook(emu, op, endeip)
+            mon.posthook(emu, op, endpc)
 
     def stepo(self):
         return self.step(True)
@@ -200,42 +267,42 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         """ stepi until ret instruction """
         emu = self._emu
         for _ in xrange(max_instruction_count):
-            eip = emu.getProgramCounter()
-            if eip in self._bps:
+            pc = emu.getProgramCounter()
+            if pc in self._bps:
                 raise BreakpointHit()
-            op = emu.parseOpcode(eip)
+            op = emu.parseOpcode(pc)
             if self.isCall(op):
                 return
             else:
                 self.stepi()
-        raise InstructionRangeExceededError(eip)
+        raise InstructionRangeExceededError(pc)
 
     def runToReturn(self, max_instruction_count=1000):
         """ stepo until ret instruction """
         emu = self._emu
         for _ in xrange(max_instruction_count):
-            eip = emu.getProgramCounter()
-            if eip in self._bps:
+            pc = emu.getProgramCounter()
+            if pc in self._bps:
                 raise BreakpointHit()
-            op = emu.parseOpcode(eip)
+            op = emu.parseOpcode(pc)
             if self.isRet(op):
                 return
             else:
                 self.stepo()
-        raise InstructionRangeExceededError(eip)
+        raise InstructionRangeExceededError(pc)
 
     def runToVa(self, va, max_instruction_count=1000):
         """ stepi until ret instruction """
         emu = self._emu
         for _ in xrange(max_instruction_count):
-            eip = emu.getProgramCounter()
-            if eip in self._bps:
+            pc = emu.getProgramCounter()
+            if pc in self._bps:
                 raise BreakpointHit()
-            if eip == va:
+            if pc == va:
                 return
             else:
                 self.stepi()
-        raise InstructionRangeExceededError(eip)
+        raise InstructionRangeExceededError(pc)
 
     def addBreakpoint(self, va):
         self._bps.add(va)
@@ -286,6 +353,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
         todo = [(funcva, self.getEmuSnap(), self.path), ]
         emu = self._emu
         vw = self._emu.vw # Save a dereference many many times
+        depth = 0
 
         while len(todo) > 0:
             va, esnap, self.curpath = todo.pop()
@@ -299,22 +367,21 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                     continue
 
             while True:
-                starteip = emu.getProgramCounter()
+                startpc = emu.getProgramCounter()
 
-                if not vw.isValidPointer(starteip):
+                if not vw.isValidPointer(startpc):
                     break
 
-                if starteip == stopva:
+                if startpc == stopva:
                     return
-
 
                 # Check straight hit count...
                 if maxhit != None:
-                    h = hits.get(starteip, 0)
+                    h = hits.get(startpc, 0)
                     h += 1
                     if h > maxhit:
                         break
-                    hits[starteip] = h
+                    hits[startpc] = h
 
                 # If we ran out of path (branches that went
                 # somewhere that we couldn't follow?
@@ -322,98 +389,30 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                     break
 
                 try:
-                    op = emu.parseOpcode(starteip)
-                    nextpc = starteip + len(op)
+                    op = emu.parseOpcode(startpc)
+                    nextpc = startpc + len(op)
                     self.op = op
 
                     for mon in self._monitors:
-                        mon.prehook(emu, op, starteip)
-
-                    # Execute the opcode
-                    emu.executeOpcode(op)
-                    vg_path.getNodeProp(self.curpath, 'valist').append(starteip)
-
-                    endeip = emu.getProgramCounter()
-
-                    for mon in self._monitors:
-                        mon.posthook(emu, op, endeip)
+                        mon.prehook(emu, op, startpc)
 
                     iscall = bool(op.iflags & v_envi.IF_CALL)
                     if iscall:
-
-                        is_call_target_resolved = self.getStackValue(0x0) == nextpc 
-
-                        api = emu.getCallApi(endeip)
-                        rtype, rname, convname, callname, funcargs = api
-                        callconv = emu.getCallingConvention(convname)
-                        argv = callconv.getCallArgs(emu, len(funcargs))
-
-                        # print("API call: " + callname)
-
-                        # attempt to invoke hooks to handle function calls.
-                        # priority:
-                        #   - monitor.apicall handler
-                        #   - driver.hooks
-                        #   - emu.hooks (default vivisect hooks)
-                        
-                        call_handled = False
-                        for mon in self._monitors:
-                            try:
-                                r = mon.apicall(emu, op, endeip, api, argv)
-                                if r is not None:
-                                    # take the first result
-                                    # not ideal, but works in the common case
-                                    self._logger.debug("monitor hook handled call: %s", callname)
-                                    call_handled = True
-                                    break
-                            except Exception, e:
-                                print("apicall error: %s" % (e))
-                                mon.logAnomaly(emu, endeip, 
-                                        "%s.apicall failed: %s" % (mon.__class__.__name__, e))
-
-                        if not call_handled:
-                            for hook in self._hooks:
-                                try:
-                                    ret = hook.hook(callname, emu, callconv, api, argv)
-                                    # take the first result
-                                    # not ideal, but works in the common case
-                                    if ret is not None:
-                                        self._logger.debug("driver hook handled call: %s", callname)
-                                        call_handled = True
-                                        break
-                                except UnsupportedFunction:
-                                    continue
-
-                        if not call_handled and callname in emu.hooks:
-                            hook = emu.hooks.get(callname)
-                            hook(self, callconv, api, argv)
-                            self._logger.debug("emu hook handled call: %s", callname)
-                            call_handled = True
-
-                        if call_handled:
-                            # some hook handled the call,
-                            # so make sure PC is at the next instruction
-                            emu.setProgramCounter(starteip + len(op))
-                        elif not is_call_target_resolved:
-                            # vivisect-specific behavior: when the call instruction does not
-                            #   emulate correct (like when the function target is not correctly mapped),
-                            #   the return pointer is not pushed,
-                            # so jump directly to next instruction
-                            emu.setProgramCounter(starteip + len(op))
-                        else:
-                            # if no hooks handled the call, but we still want to continue...
-                            if func_only:
-                                # try to emulate a return
-                                ret = emu.setVivTaint('apicall', (op, endeip, api, argv))
-                                callconv.execCallReturn( emu, ret, len(funcargs) )
-                            else:
-                                # or, keep emulating into new function
-                                pass
-
+                        wentInto = self.handleCall(startpc, op, avoid_calls=func_only)
+                        if wentInto:
+                            depth += 1
                     else:
+                        emu.executeOpcode(op)
+                    vg_path.getNodeProp(self.curpath, 'valist').append(startpc)
+                    endpc = emu.getProgramCounter()
+
+                    for mon in self._monitors:
+                        mon.posthook(emu, op, endpc)
+
+                    if not iscall:
                         # If it wasn't a call, check for branches, if so, add them to
                         # the todo list and go around again...
-                        blist = emu.checkBranches(starteip, endeip, op)
+                        blist = emu.checkBranches(startpc, endpc, op)
                         if len(blist) > 0:
                             # pc in the snap will be wrong, but over-ridden at restore
                             esnap = self.getEmuSnap()
@@ -421,12 +420,15 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                                 todo.append((bva, esnap, bpath))
                             break
 
-                    # If we enounter a procedure exit, it doesn't
-                    # matter what EIP is, we're done here.
                     if op.iflags & v_envi.IF_RET:
                         vg_path.setNodeProp(self.curpath, 'cleanret', True)
-                        break
+                        if depth == 0:
+                            break
+                        else:
+                            depth -= 1
 
+                # If we enounter a procedure exit, it doesn't
+                # matter what PC is, we're done here.
                 except v_envi.UnsupportedInstruction as e:
                     if strictops:
                         break
@@ -437,7 +439,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                 except Exception as e:
                     self._logger.error("error during emulation of function", exc_info=True)
                     for mon in self._monitors:
-                        mon.logAnomaly(emu, starteip, str(e))
+                        mon.logAnomaly(emu, startpc, str(e))
                     break # If we exc during execution, this branch is dead.
 
     def runFunction(self, funcva, stopva=None, maxhit=None, maxloop=None, strictops=True, func_only=True):
