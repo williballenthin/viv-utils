@@ -25,7 +25,7 @@ class InstructionRangeExceededError(Exception):
         return "InstructionRangeExceededError(ended at instruction 0x%08X)" % self.pc
 
 
-class Hook(object):
+class Hook(LoggingObject):
     def __init__(self):
         super(Hook, self).__init__()
 
@@ -64,7 +64,7 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor, LoggingObject):
         #self._logger.debug("  EBX: %s", hex(emu.getRegisterByName("ebx")))
         pass
 
-    def apicall(self, emu, op, pc, api, argv):
+    def apicall(self, driver, op, pc, api, argv):
         #self._logger.debug("apicall: %s %s %s %s", op, pc, api, argv)
         # if non-None is returned, then it signals that the API call was handled
         #   and this function *must* handle cleaning up the stack
@@ -162,8 +162,7 @@ class EmulatorDriver(object):
             # ensure is import
             if emu.vw.isLocType(target, vivisect.const.LOC_IMPORT):
                 # get taint value
-                import struct
-                target = struct.unpack("<I", emu.readMemory(target, 4))[0]  # TODO: 32bit only????
+                target = emu.readMemoryFormat(target, "<P")[0]
                 api = emu.getCallApi(target)
                 rtype, rname, convname, callname, funcargs = api
                 callconv = emu.getCallingConvention(convname)
@@ -184,7 +183,7 @@ class EmulatorDriver(object):
         call_handled = False
         for mon in self._monitors:
             try:
-                r = mon.apicall(emu, op, endpc, api, argv)
+                r = mon.apicall(self, op, endpc, api, argv)
                 if r is not None:
                     # take the first result
                     # not ideal, but works in the common case
@@ -199,7 +198,7 @@ class EmulatorDriver(object):
         if not call_handled:
             for hook in self._hooks:
                 try:
-                    ret = hook.hook(callname, emu, callconv, api, argv)
+                    ret = hook.hook(callname, self, callconv, api, argv)
                     # take the first result
                     # not ideal, but works in the common case
                     if ret is not None:
