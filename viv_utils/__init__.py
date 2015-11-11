@@ -7,6 +7,9 @@ import vivisect
 import intervaltree
 
 
+def getVwSampleMd5(vw):
+    return vw.filemeta.values()[0]["md5sum"]
+
 def getWorkspace(fp, reanalyze=False, verbose=False):
     '''
     For a file path return a workspace, it will create one if the extension
@@ -67,17 +70,17 @@ class LoggingObject(object):
 class Function(LoggingObject):
     def __init__(self, vw, va):
         super(Function, self).__init__()
-        self._vw = vw
+        self.vw = vw
         self.va = va
 
     @funcy.cached_property
     def basic_blocks(self):
-        bb = map(lambda b: BasicBlock(self._vw, *b), self._vw.getFunctionBlocks(self.va))
+        bb = map(lambda b: BasicBlock(self.vw, *b), self.vw.getFunctionBlocks(self.va))
         return sorted(bb, key=lambda b: b.va)
 
     @funcy.cached_property
     def id(self):
-        return self._vw.filemeta.values()[0]["md5sum"] + ":" + hex(self.va)
+        return self.vw.filemeta.values()[0]["md5sum"] + ":" + hex(self.va)
 
     def __repr__(self):
         return "Function(va: {:s})".format(hex(self.va))
@@ -86,7 +89,7 @@ class Function(LoggingObject):
 class BasicBlock(LoggingObject):
     def __init__(self, vw, va, size, fva):
         super(BasicBlock, self).__init__()
-        self._vw = vw
+        self.vw = vw
         self.va = va
         self.size = size
         self.fva = fva
@@ -106,7 +109,7 @@ class BasicBlock(LoggingObject):
         ret = []
         va = self.va
         while va < self.va + self.size:
-            o = self._vw.parseOpcode(va)
+            o = self.vw.parseOpcode(va)
             ret.append(o)
             va += len(o)
         return ret
@@ -125,13 +128,13 @@ class InstructionFunctionIndex(LoggingObject):
     """ Index from VA to containing function VA """
     def __init__(self, vw):
         super(InstructionFunctionIndex, self).__init__()
-        self._vw = vw
+        self.vw = vw
         self._index = intervaltree.IntervalTree()
         self._do_index()
 
     def _do_index(self):
-        for funcva in self._vw.getFunctions():
-            f = Function(self._vw, funcva)
+        for funcva in self.vw.getFunctions():
+            f = Function(self.vw, funcva)
             for bb in f.basic_blocks:
                 self._index[bb.va:bb.va + bb.size] = funcva
 
