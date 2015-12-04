@@ -67,6 +67,16 @@ class LoggingObject(object):
             self._logger.error(*self._formatFormatString(args), **kwargs)
 
 
+def set_function_name(vw, va, new_name):
+    # vivgui seems to override function_name with symbol names, but this is correct
+    ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(va)
+    vw.setFunctionApi(va, (ret_type, ret_name, call_conv, new_name, args))
+
+
+def get_function_name(vw, va):
+    ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(va)
+    return func_name
+
 class Function(LoggingObject):
     def __init__(self, vw, va):
         super(Function, self).__init__()
@@ -84,6 +94,14 @@ class Function(LoggingObject):
 
     def __repr__(self):
         return "Function(va: {:s})".format(hex(self.va))
+        
+    @property
+    def name(self):
+        return get_function_name(self.vw, self.va)
+        
+    @name.setter
+    def name(self, new_name):
+        return set_function_name(self.vw, self.va, new_name)
 
 
 class BasicBlock(LoggingObject):
