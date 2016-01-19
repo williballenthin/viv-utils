@@ -157,5 +157,8 @@ class InstructionFunctionIndex(LoggingObject):
                 self._index[bb.va:bb.va + bb.size] = funcva
 
     def __getitem__(self, key):
-        return one(self._index[key]).data
+        v = one(self._index[key])
+        if v is None:
+            raise KeyError()
+        return v.data
 
