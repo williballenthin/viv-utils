@@ -2,12 +2,17 @@ import logging
 
 import vivisect
 import envi as v_envi
+import envi.memory as v_mem
 import visgraph.pathcore as vg_path
 
 from . import LoggingObject
 
 
 class StopEmulation(Exception):
+    pass
+
+
+class BreakpointHit(Exception):
     pass
 
 
@@ -227,9 +232,17 @@ class EmulatorDriver(object):
             emu.setProgramCounter(pc + len(op))
             return False
         elif not avoid_calls:
-            # op already emulated, just return
-            return True
-    
+            if emu.probeMemory(endpc, 0x1, v_mem.MM_EXEC):
+                # this is executable memory, so we're good
+                # op already emulated, just return
+                return True
+            else:
+                # this is some unknown region of memory, try to return
+                callconv.execCallReturn(emu, 0, len(funcargs))
+                emu.setProgramCounter(pc + len(op))
+                return False
+
+
 
 class DebuggerEmulatorDriver(EmulatorDriver):
     """
@@ -433,7 +446,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                     if strictops:
                         break
                     else:
-                        self._logger.warning('runFunction continuing after unsupported instruction: 0x%08x %s',
+                        self._logger.debug('runFunction continuing after unsupported instruction: 0x%08x %s',
                                e.op.va, e.op.mnem)
                         emu.setProgramCounter(e.op.va + e.op.size)
                 except Exception as e:
