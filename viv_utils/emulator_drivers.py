@@ -145,10 +145,6 @@ class EmulatorDriver(object):
             raise RuntimeError("not a call")
 
         emu = self._emu
-        api = emu.getCallApi(pc)
-        rtype, rname, convname, callname, funcargs = api
-        callconv = emu.getCallingConvention(convname)
-        argv = callconv.getCallArgs(emu, len(funcargs))
 
         targetOpnd = op.getOperands()[0]
         # want to resolve imports, which are currently broken in vivisect?
@@ -173,6 +169,11 @@ class EmulatorDriver(object):
 
         emu.executeOpcode(op)
         endpc = emu.getProgramCounter()
+
+        api = emu.getCallApi(endpc)
+        rtype, rname, convname, callname, funcargs = api
+        callconv = emu.getCallingConvention(convname)
+        argv = callconv.getCallArgs(emu, len(funcargs))
 
         # attempt to invoke hooks to handle function calls.
         # priority:
