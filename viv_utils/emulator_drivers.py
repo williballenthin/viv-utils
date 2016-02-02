@@ -243,7 +243,6 @@ class EmulatorDriver(object):
                 return False
 
 
-
 class DebuggerEmulatorDriver(EmulatorDriver):
     """
     this is a EmulatorDriver that supports debugger-like operations,

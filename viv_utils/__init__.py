@@ -162,3 +162,17 @@ class InstructionFunctionIndex(LoggingObject):
             raise KeyError()
         return v.data
 
+
+
+def getFunctionName(vw, fva):
+    ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(fva)
+    return func_name
+
+
+def getFunctionCallingConvention(vw, fva):
+    ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(fva)
+    return call_conv
+
+
+def getFunctionArgs(vw, fva):
+    return vw.getFunctionArgs(fva)
