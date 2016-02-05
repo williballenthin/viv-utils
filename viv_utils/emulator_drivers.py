@@ -53,7 +53,9 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor, LoggingObject):
     def dumpStack(self, emu, num):
         self._logger.debug("stack: ESP: %s", hex(emu.getStackCounter()))
         for i in xrange(num):
-            self._logger.debug("stack: ESP + %s: %s", hex(4 * i), hex(self.getStackValue(emu, 4 * i)))
+            self.d("stack: ESP + %s: %s",
+                               hex(emu.imem_psize * i),
+                               hex(self.getStackValue(emu, emu.imem_psize * i)))
 
     def prehook(self, emu, op, startpc):
         pass
@@ -75,8 +77,8 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor, LoggingObject):
         #   and this function *must* handle cleaning up the stack
         pass
 
-    def logAnomaly(self, *args, **kwargs):
-        self._logger.warning("error: args:%s kwargs:%s", args, kwargs)
+    def logAnomaly(self, emu, pc, e):
+        self.w("anomaly: %s", e)
 
 
 class EmulatorDriver(object):
@@ -168,6 +170,8 @@ class EmulatorDriver(object):
                 rtype, rname, convname, callname, funcargs = api
                 callconv = emu.getCallingConvention(convname)
                 argv = callconv.getCallArgs(emu, len(funcargs))
+            else:
+                target = emu.readMemoryFormat(target, "<P")[0]
         else:
             # like: call 0x10008050, probably not an import
             target = targetOpnd.getOperValue(op, emu)
@@ -197,7 +201,6 @@ class EmulatorDriver(object):
                     call_handled = True
                     break
             except Exception, e:
-                print("apicall error: %s" % (e))
                 mon.logAnomaly(emu, endpc, 
                         "%s.apicall failed: %s" % (mon.__class__.__name__, e))
 
@@ -449,7 +452,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                                e.op.va, e.op.mnem)
                         emu.setProgramCounter(e.op.va + e.op.size)
                 except Exception as e:
-                    self._logger.error("error during emulation of function", exc_info=True)
+                    self._logger.warning("error during emulation of function: %s", e)#, exc_info=True)
                     for mon in self._monitors:
                         mon.logAnomaly(emu, startpc, str(e))
                     break # If we exc during execution, this branch is dead.

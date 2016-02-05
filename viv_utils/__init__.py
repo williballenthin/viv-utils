@@ -176,3 +176,4 @@ def getFunctionCallingConvention(vw, fva):
 
 def getFunctionArgs(vw, fva):
     return vw.getFunctionArgs(fva)
+
