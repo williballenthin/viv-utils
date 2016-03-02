@@ -1,2 +1,6 @@
-8c713117af4ca6bbd69292a78069e75b	0x40104F
+# you should now use the public package
+
+```
+pip install viv-utils
+```
 
