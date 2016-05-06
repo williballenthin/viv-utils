@@ -94,11 +94,11 @@ class Function(LoggingObject):
 
     def __repr__(self):
         return "Function(va: {:s})".format(hex(self.va))
-        
+
     @property
     def name(self):
         return get_function_name(self.vw, self.va)
-        
+
     @name.setter
     def name(self, new_name):
         return set_function_name(self.vw, self.va, new_name)
@@ -116,7 +116,7 @@ class BasicBlock(LoggingObject):
     def instructions(self):
         """
         from envi/__init__.py:class Opcode
-        391         opcode   - An architecture specific numerical value for the opcode              
+        391         opcode   - An architecture specific numerical value for the opcode
         392         mnem     - A humon readable mnemonic for the opcode
         393         prefixes - a bitmask of architecture specific instruction prefixes
         394         size     - The size of the opcode in bytes

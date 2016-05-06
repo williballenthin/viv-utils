@@ -88,19 +88,21 @@ class EmulatorDriver(object):
     def __init__(self, emu):
         super(EmulatorDriver, self).__init__()
         self._emu = emu
-        self._monitors = []
-        self._hooks = []
+        self._monitors = set([])
+        self._hooks = set([])
         self._logger = logging.getLogger("EmulatorDriver")
 
     def add_monitor(self, mon):
-        self._monitors.append(mon)
+        self._monitors.add(mon)
 
     def remove_monitor(self, mon):
-        if mon in self._monitors:
-            del self._monitors[self._monitors.index(mon)]
+        self._monitors.remove(mon)
 
     def add_hook(self, hook):
-        self._hooks.append(hook)
+        self._hooks.add(hook)
+
+    def remove_hook(self, hook):
+        self._hooks.remove(hook)
 
     def isCall(self, op):
         return bool(op.iflags & v_envi.IF_CALL)
@@ -142,10 +144,10 @@ class EmulatorDriver(object):
         """
         for the given call:
           if its hooked, do the hook, and pc goes to next instruction
-          else, 
+          else,
             if avoid_calls is false, step into the call, and pc is at first instruction of function
             if avoid_calls is true, step over the call, as best as possible
-        
+
         return True if stepped into the function, False if the function is completely handled
         """
         if not self.isCall(op):
@@ -201,7 +203,7 @@ class EmulatorDriver(object):
                     call_handled = True
                     break
             except Exception, e:
-                mon.logAnomaly(emu, endpc, 
+                mon.logAnomaly(emu, endpc,
                         "%s.apicall failed: %s" % (mon.__class__.__name__, e))
 
         if not call_handled:
