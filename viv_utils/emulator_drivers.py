@@ -4,6 +4,7 @@ import vivisect
 import envi as v_envi
 import envi.memory as v_mem
 import visgraph.pathcore as vg_path
+from envi.archs.i386.disasm import PREFIX_REP
 
 from . import LoggingObject
 
@@ -395,7 +396,10 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                     h = hits.get(startpc, 0)
                     h += 1
                     if h > maxhit:
-                        break
+                        # If emu.executeOpcode() returns other than None, that is the new eip.
+                        # In case of `rep` need to execute the same instruction multiple times.
+                        if not (op.prefixes & PREFIX_REP):
+                            break
                     hits[startpc] = h
 
                 # If we ran out of path (branches that went
