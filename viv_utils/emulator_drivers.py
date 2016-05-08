@@ -413,23 +413,6 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                 if startpc == stopva:
                     return
 
-                if op and (op.prefixes & PREFIX_REP):
-                    # execute same instruction with `rep` prefix up to maxrep times
-                    if maxrep != None:
-                        h = rephits.get(startpc, 0)
-                        h += 1
-                        if h > maxrep:
-                            break
-                        rephits[startpc] = h
-                else:
-                    # Check straight hit count for all other instructions...
-                    if maxhit != None:
-                        h = hits.get(startpc, 0)
-                        h += 1
-                        if h > maxhit:
-                            break
-                        hits[startpc] = h
-
                 # If we ran out of path (branches that went
                 # somewhere that we couldn't follow?
                 if self.curpath == None:
@@ -437,8 +420,22 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
 
                 try:
                     op = emu.parseOpcode(startpc)
-                    if op.prefixes & PREFIX_REP:
-                        self._logger.debug("ecx=%d, eip=0x%X, %s", self.getRegisterByName("ecx"), self.getProgramCounter(), op)
+
+                    if op.prefixes & PREFIX_REP and maxrep != None:
+                        # execute same instruction with `rep` prefix up to maxrep times
+                        h = rephits.get(startpc, 0)
+                        h += 1
+                        if h > maxrep:
+                            break
+                        rephits[startpc] = h
+                    elif maxhit != None:
+                        # Check straight hit count for all other instructions...
+                        h = hits.get(startpc, 0)
+                        h += 1
+                        if h > maxhit:
+                            break
+                        hits[startpc] = h
+
                     nextpc = startpc + len(op)
                     self.op = op
 
