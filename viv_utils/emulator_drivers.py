@@ -4,6 +4,7 @@ import vivisect
 import envi as v_envi
 import envi.memory as v_mem
 import visgraph.pathcore as vg_path
+from envi.archs.i386.disasm import PREFIX_REP
 
 from . import LoggingObject
 
@@ -377,7 +378,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
         }
         return vg_path.newPathNode(parent=parent, **props)
 
-    def _runFunction(self, funcva, stopva=None, maxhit=None, maxloop=None, strictops=True, func_only=True):
+    def _runFunction(self, funcva, stopva=None, maxhit=None, maxloop=None, maxrep=None, strictops=True, func_only=True):
         """
         :param func_only: is this emulator meant to stay in one function scope?
         :param strictops: should we bail on emulation if unsupported instruction encountered
@@ -385,10 +386,12 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
         vg_path.setNodeProp(self.curpath, 'bva', funcva)
 
         hits = {}
+        rephits = {}
         todo = [(funcva, self.getEmuSnap(), self.path), ]
         emu = self._emu
         vw = self._emu.vw # Save a dereference many many times
         depth = 0
+        op = None
 
         while len(todo) > 0:
             va, esnap, self.curpath = todo.pop()
@@ -410,13 +413,22 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                 if startpc == stopva:
                     return
 
-                # Check straight hit count...
-                if maxhit != None:
-                    h = hits.get(startpc, 0)
-                    h += 1
-                    if h > maxhit:
-                        break
-                    hits[startpc] = h
+                if op and (op.prefixes & PREFIX_REP):
+                    # execute same instruction with `rep` prefix up to maxrep times
+                    if maxrep != None:
+                        h = rephits.get(startpc, 0)
+                        h += 1
+                        if h > maxrep:
+                            break
+                        rephits[startpc] = h
+                else:
+                    # Check straight hit count for all other instructions...
+                    if maxhit != None:
+                        h = hits.get(startpc, 0)
+                        h += 1
+                        if h > maxhit:
+                            break
+                        hits[startpc] = h
 
                 # If we ran out of path (branches that went
                 # somewhere that we couldn't follow?
@@ -425,6 +437,8 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
 
                 try:
                     op = emu.parseOpcode(startpc)
+                    if op.prefixes & PREFIX_REP:
+                        self._logger.debug("ecx=%d, eip=0x%X, %s", self.getRegisterByName("ecx"), self.getProgramCounter(), op)
                     nextpc = startpc + len(op)
                     self.op = op
 
@@ -478,8 +492,8 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                         mon.logAnomaly(emu, startpc, str(e))
                     break # If we exc during execution, this branch is dead.
 
-    def runFunction(self, funcva, stopva=None, maxhit=None, maxloop=None, strictops=True, func_only=True):
+    def runFunction(self, funcva, stopva=None, maxhit=None, maxloop=None, maxrep=None, strictops=True, func_only=True):
         try:
-            self._runFunction(funcva, stopva, maxhit, maxloop, strictops, func_only)
+            self._runFunction(funcva, stopva, maxhit, maxloop, maxrep, strictops, func_only)
         except StopEmulation:
             return
