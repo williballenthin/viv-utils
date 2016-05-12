@@ -177,3 +177,25 @@ def getFunctionCallingConvention(vw, fva):
 def getFunctionArgs(vw, fva):
     return vw.getFunctionArgs(fva)
 
+
+def loadShellcode(baseaddr, buf):
+    vw = vivisect.VivWorkspace()
+    vw.setMeta('Architecture', 'i386')
+    vw.setMeta('Platform', 'windows')
+    vw.setMeta('Format','pe')
+    vw._snapInAnalysisModules()
+
+    if typ == "R":
+        perm = envi.memory.MM_READ
+    elif typ == "RW":
+        perm = envi.memory.MM_READ_WRITE
+    elif typ == "RE":
+        perm = envi.memory.MM_READ_EXEC
+    elif typ == "RWE" or typ == "IMAGE" or typ == "WINSOCK":
+        perm = envi.memory.MM_RWX
+    else:
+        perm = envi.memory.MM_NONE
+        
+    vw.addMemoryMap(baseaddr,envi.memory.MM_RWX, 'raw', buf)
+    vw.addSegment(baseaddr, len(buf), '%.8x-%s' % (baseaddr, "RWE"), 'blob' )
+    return vw
