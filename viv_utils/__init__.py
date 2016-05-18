@@ -10,6 +10,7 @@ import intervaltree
 def getVwSampleMd5(vw):
     return vw.filemeta.values()[0]["md5sum"]
 
+
 def getWorkspace(fp, reanalyze=False, verbose=False):
     '''
     For a file path return a workspace, it will create one if the extension
@@ -23,17 +24,14 @@ def getWorkspace(fp, reanalyze=False, verbose=False):
         vw.loadWorkspace(fp)
         if reanalyze:
             vw.analyze()
-            vw.saveWorkspace()
     else:
         if os.path.exists(fp + ".viv"):
             vw.loadWorkspace(fp + ".viv")
             if reanalyze:
                 vw.analyze()
-                vw.saveWorkspace()
         else:
             vw.loadFromFile(fp)
             vw.analyze()
-            vw.saveWorkspace()
 
     return vw
 
@@ -195,7 +193,7 @@ def loadShellcode(baseaddr, buf):
         perm = envi.memory.MM_RWX
     else:
         perm = envi.memory.MM_NONE
-        
+
     vw.addMemoryMap(baseaddr,envi.memory.MM_RWX, 'raw', buf)
     vw.addSegment(baseaddr, len(buf), '%.8x-%s' % (baseaddr, "RWE"), 'blob' )
     return vw
