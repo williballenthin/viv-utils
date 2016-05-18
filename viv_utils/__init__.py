@@ -10,7 +10,7 @@ import intervaltree
 def getVwSampleMd5(vw):
     return vw.filemeta.values()[0]["md5sum"]
 
-def getWorkspace(fp, reanalyze=False, verbose=False):
+def getWorkspace(fp, reanalyze=False, verbose=False, should_save=True):
     '''
     For a file path return a workspace, it will create one if the extension
     is not .viv, otherwise it will load the existing one. Reanalyze will cause
@@ -23,17 +23,17 @@ def getWorkspace(fp, reanalyze=False, verbose=False):
         vw.loadWorkspace(fp)
         if reanalyze:
             vw.analyze()
-            vw.saveWorkspace()
     else:
         if os.path.exists(fp + ".viv"):
             vw.loadWorkspace(fp + ".viv")
             if reanalyze:
                 vw.analyze()
-                vw.saveWorkspace()
         else:
             vw.loadFromFile(fp)
             vw.analyze()
-            vw.saveWorkspace()
+            
+    if should_save:
+        vw.saveWorkspace()
 
     return vw
 
