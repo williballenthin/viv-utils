@@ -158,6 +158,8 @@ class InstructionFunctionIndex(LoggingObject):
         for funcva in self.vw.getFunctions():
             f = Function(self.vw, funcva)
             for bb in f.basic_blocks:
+                if bb.size == 0:
+                    continue
                 self._index[bb.va:bb.va + bb.size] = funcva
 
     def __getitem__(self, key):
