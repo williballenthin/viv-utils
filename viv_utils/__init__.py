@@ -127,7 +127,11 @@ class BasicBlock(LoggingObject):
         ret = []
         va = self.va
         while va < self.va + self.size:
-            o = self.vw.parseOpcode(va)
+            try:
+                o = self.vw.parseOpcode(va)
+            except Exception as e:
+                self.d("Failed to disassemble: %s: %s", hex(va), e.message)
+                break
             ret.append(o)
             va += len(o)
         return ret
