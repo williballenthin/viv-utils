@@ -184,7 +184,7 @@ def getFunctionArgs(vw, fva):
     return vw.getFunctionArgs(fva)
 
 
-def loadShellcode(baseaddr, buf):
+def loadShellcode(baseaddr, buf, typ="RWE"):
     vw = vivisect.VivWorkspace()
     vw.setMeta('Architecture', 'i386')
     vw.setMeta('Platform', 'windows')
