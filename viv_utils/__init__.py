@@ -2,6 +2,7 @@ import os
 import logging
 import inspect
 
+import envi
 import funcy
 import vivisect
 import intervaltree
@@ -10,7 +11,7 @@ import intervaltree
 def getVwSampleMd5(vw):
     return vw.filemeta.values()[0]["md5sum"]
 
-def getWorkspace(fp, reanalyze=False, verbose=False):
+def getWorkspace(fp, reanalyze=False, verbose=False, should_save=True):
     '''
     For a file path return a workspace, it will create one if the extension
     is not .viv, otherwise it will load the existing one. Reanalyze will cause
@@ -23,17 +24,17 @@ def getWorkspace(fp, reanalyze=False, verbose=False):
         vw.loadWorkspace(fp)
         if reanalyze:
             vw.analyze()
-            vw.saveWorkspace()
     else:
         if os.path.exists(fp + ".viv"):
             vw.loadWorkspace(fp + ".viv")
             if reanalyze:
                 vw.analyze()
-                vw.saveWorkspace()
         else:
             vw.loadFromFile(fp)
             vw.analyze()
-            vw.saveWorkspace()
+            
+    if should_save:
+        vw.saveWorkspace()
 
     return vw
 
@@ -127,7 +128,11 @@ class BasicBlock(LoggingObject):
         ret = []
         va = self.va
         while va < self.va + self.size:
-            o = self.vw.parseOpcode(va)
+            try:
+                o = self.vw.parseOpcode(va)
+            except Exception as e:
+                self.d("Failed to disassemble: %s: %s", hex(va), e.message)
+                break
             ret.append(o)
             va += len(o)
         return ret
@@ -180,7 +185,7 @@ def getFunctionArgs(vw, fva):
     return vw.getFunctionArgs(fva)
 
 
-def loadShellcode(baseaddr, buf):
+def loadShellcode(baseaddr, buf, typ="RWE"):
     vw = vivisect.VivWorkspace()
     vw.setMeta('Architecture', 'i386')
     vw.setMeta('Platform', 'windows')
