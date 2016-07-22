@@ -2,6 +2,7 @@ import os
 import logging
 import inspect
 
+import envi
 import funcy
 import vivisect
 import intervaltree
