@@ -1,6 +1,7 @@
 import os
 import logging
 import inspect
+import tempfile
 
 import envi
 import funcy
@@ -205,4 +206,69 @@ def loadShellcode(baseaddr, buf, typ="RWE"):
         
     vw.addMemoryMap(baseaddr,envi.memory.MM_RWX, 'raw', buf)
     vw.addSegment(baseaddr, len(buf), '%.8x-%s' % (baseaddr, "RWE"), 'blob' )
+    return vw
+
+
+def saveWorkspaceToBytes(vw):
+    """
+    serialize a vivisect workspace to a Python string/bytes.
+
+    note, this creates and deletes a temporary file on the
+      local filesystem.
+    """
+    orig_storage = vw.getMeta("StorageName")
+    try:
+        _, temp_path = tempfile.mkstemp(suffix="viv")
+        try:
+            vw.setMeta("StorageName", temp_path)
+            vw.saveWorkspace()
+            with open(temp_path, "rb") as f:
+                # note: here's the exit point.
+                return f.read()
+        finally:
+            try:
+                os.rm(temp_path)
+            except Exception:
+                pass
+    finally:
+        vw.setMeta("StorageName", orig_storage)
+
+
+def loadWorkspaceFromBytes(vw, buf):
+    """
+    deserialize a vivisect workspace from a Python string/bytes.
+    """
+    _, temp_path = tempfile.mkstemp(suffix="viv")
+    try:
+        with open(temp_path, "wb") as f:
+            f.write(buf)
+        vw.loadWorkspace(temp_path)
+        # note: here's the exit point.
+        return vw
+    finally:
+        try:
+            os.rm(temp_path)
+        except Exception:
+            pass
+
+
+def getWorkspaceFromBytes(buf):
+    """
+    create a new vivisect workspace and load it from a
+      Python string/bytes.
+    """
+    vw = vivisect.VivWorkspace()
+    loadWorkspaceFromBytes(vw, buf)
+    return vw
+
+
+def getWorkspaceFromFile(filepath):
+    """
+    deserialize a file into a new vivisect workspace.
+    """
+    vw = vivisect.VivWorkspace()
+    vw.verbose = True
+    vw.config.viv.parsers.pe.nx = True
+    vw.loadFromFile(filepath)
+    vw.analyze()
     return vw
