@@ -5,6 +5,7 @@ import envi as v_envi
 import envi.memory as v_mem
 import visgraph.pathcore as vg_path
 from envi.archs.i386.disasm import PREFIX_REP
+import envi.archs.i386 as e_i386
 
 from . import LoggingObject
 
@@ -224,14 +225,14 @@ class EmulatorDriver(object):
         emu = self._emu
 
         targetOpnd = op.getOperands()[0]
-        self._logger.debug("%s -- deref: %s, immed: %s, %s", op.mnem, targetOpnd.isDeref(), targetOpnd.isImmed(), targetOpnd)
+        self._logger.debug("isDeref: %s, isImmed: %s, targetOpnd: %s", targetOpnd.isDeref(), targetOpnd.isImmed(), targetOpnd)
         # fetch `target` that is the VA of the function
         if targetOpnd.isImmed():
             # like: call 0x10008050, probably not an import
             target = targetOpnd.getOperValue(op, emu)
         # TODO check other operand for other architectures?
         # dont't handle dynamic calls here
-        elif targetOpnd.isDeref() and not isinstance(other, i386RegMemOper):
+        elif targetOpnd.isDeref() and not isinstance(targetOpnd, e_i386.i386RegMemOper):
             # maybe call through IAT, like: call [0x10008050]
             # fetch the "0x10008050"
             target = targetOpnd.getOperAddr(op, emu)
