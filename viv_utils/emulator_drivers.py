@@ -224,19 +224,43 @@ class EmulatorDriver(object):
         emu = self._emu
 
         targetOpnd = op.getOperands()[0]
-
+        self._logger.debug("%s -- deref: %s, immed: %s, %s", op.mnem, targetOpnd.isDeref(), targetOpnd.isImmed(), targetOpnd)
         # fetch `target` that is the VA of the function
-        if targetOpnd.isDeref():
+        if targetOpnd.isImmed():
+            # like: call 0x10008050, probably not an import
+            target = targetOpnd.getOperValue(op, emu)
+        # TODO check other operand for other architectures?
+        # dont't handle dynamic calls here
+        elif targetOpnd.isDeref() and not isinstance(other, i386RegMemOper):
             # maybe call through IAT, like: call [0x10008050]
             # fetch the "0x10008050"
             target = targetOpnd.getOperAddr(op, emu)
         else:
-            # like: call 0x10008050, probably not an import
-            target = targetOpnd.getOperValue(op, emu)
+            # otherwise dynamic call, such as call eax; or call dword [ebp - 4]
+            # can verify this most of the times via self.vw.getVaSetRow('DynamicBranches', pc, [bflags])
+
+            # do monitor api call manually,copied from doHook
+            # TODO are last two arguments needed? stackstrings monitor doesnt care about them
+            for mon in self._monitors:
+                try:
+                    r = mon.apicall(self, op, pc, None, None)
+                    if r is not None:
+                        # take the first result
+                        # not ideal, but works in the common case
+                        self._logger.debug("monitor hook handled call: %s", callname)
+                        break
+                except Exception, e:
+                    mon.logAnomaly(emu, pc,
+                            "%s.apicall failed: %s" % (mon.__class__.__name__, e))
+
+            # TODO no call api/convention available, handle stack adjustment?
+            emu.setProgramCounter(pc + len(op))
+            return False
 
         emu.executeOpcode(op)
         endpc = emu.getProgramCounter()
 
+        # TODO handle case where no api/callconv is available
         api = emu.getCallApi(endpc)
         rtype, rname, convname, callname, funcargs = api
         callconv = emu.getCallingConvention(convname)
