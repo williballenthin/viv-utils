@@ -186,26 +186,37 @@ def getFunctionArgs(vw, fva):
     return vw.getFunctionArgs(fva)
 
 
-def loadShellcode(baseaddr, buf, typ="RWE"):
+def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=None, should_save=False, save_path=None):
+    """
+    Load shellcode into memory object and generate vivisect workspace.
+    Thanks to Tom for most of the code.
+    :param buf: shellcode buffer bytes
+    :param arch: architecture string
+    :param base: base address where shellcode will be loaded
+    :param entry_point: entry point of shellcode
+    :param should_save: save workspace to disk
+    :param save_path: path to save workspace to
+    :return: vivisect workspace
+    """
     vw = vivisect.VivWorkspace()
-    vw.setMeta('Architecture', 'i386')
+    vw.setMeta('Architecture', arch)
     vw.setMeta('Platform', 'windows')
-    vw.setMeta('Format','pe')
+    vw.setMeta('Format', 'pe')
     vw._snapInAnalysisModules()
 
-    if typ == "R":
-        perm = envi.memory.MM_READ
-    elif typ == "RW":
-        perm = envi.memory.MM_READ_WRITE
-    elif typ == "RE":
-        perm = envi.memory.MM_READ_EXEC
-    elif typ == "RWE" or typ == "IMAGE" or typ == "WINSOCK":
-        perm = envi.memory.MM_RWX
-    else:
-        perm = envi.memory.MM_NONE
-        
-    vw.addMemoryMap(baseaddr,envi.memory.MM_RWX, 'raw', buf)
-    vw.addSegment(baseaddr, len(buf), '%.8x-%s' % (baseaddr, "RWE"), 'blob' )
+    vw.addMemoryMap(base, envi.memory.MM_RWX, 'shellcode', buf)
+    vw.addSegment(base, len(buf), 'shellcode_0x%x' % base, 'blob')
+
+    if entry_point:
+        vw.addEntryPoint(base + entry_point)
+    vw.analyze()
+
+    if should_save:
+        if save_path is None:
+            raise Exception("Failed to save workspace, destination save path cannot be empty")
+        vw.setMeta("StorageName", "%s.viv" % save_path)
+        vw.saveWorkspace()
+
     return vw
 
 
