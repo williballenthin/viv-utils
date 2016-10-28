@@ -228,17 +228,6 @@ class EmulatorDriver(object):
 
         emu = self._emu
 
-        targetOpnd = op.getOperands()[0]
-
-        # fetch `target` that is the VA of the function
-        if targetOpnd.isDeref():
-            # maybe call through IAT, like: call [0x10008050]
-            # fetch the "0x10008050"
-            target = targetOpnd.getOperAddr(op, emu)
-        else:
-            # like: call 0x10008050, probably not an import
-            target = targetOpnd.getOperValue(op, emu)
-
         emu.executeOpcode(op)
         endpc = emu.getProgramCounter()
 
