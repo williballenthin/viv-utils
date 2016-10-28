@@ -157,7 +157,7 @@ class EmulatorDriver(object):
         if convname:
             callconv = emu.getCallingConvention(convname)
         else:
-            callconv = emu.getCallingConventions()[0][1]  # use as default
+            callconv = emu.getCallingConvention("stdcall")
         argv = []
         if callconv:
             argv = callconv.getCallArgs(emu, len(funcargs))
@@ -236,7 +236,7 @@ class EmulatorDriver(object):
         if convname:
             callconv = emu.getCallingConvention(convname)
         else:
-            callconv = emu.getCallingConventions()[0][1]  # use as default
+            callconv = emu.getCallingConvention("stdcall")
 
         if self.doHook(endpc, op):
             # some hook handled the call,
