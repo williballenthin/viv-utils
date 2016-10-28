@@ -154,8 +154,13 @@ class EmulatorDriver(object):
 
         api = emu.getCallApi(pc)
         rtype, rname, convname, callname, funcargs = api
-        callconv = emu.getCallingConvention(convname)
-        argv = callconv.getCallArgs(emu, len(funcargs))
+        if convname:
+            callconv = emu.getCallingConvention(convname)
+        else:
+            callconv = emu.getCallingConventions()[0][1]  # use as default
+        argv = []
+        if callconv:
+            argv = callconv.getCallArgs(emu, len(funcargs))
 
         # attempt to invoke hooks to handle function calls.
         # priority:
@@ -239,8 +244,10 @@ class EmulatorDriver(object):
 
         api = emu.getCallApi(endpc)
         rtype, rname, convname, callname, funcargs = api
-        callconv = emu.getCallingConvention(convname)
-        argv = callconv.getCallArgs(emu, len(funcargs))
+        if convname:
+            callconv = emu.getCallingConvention(convname)
+        else:
+            callconv = emu.getCallingConventions()[0][1]  # use as default
 
         if self.doHook(endpc, op):
             # some hook handled the call,
