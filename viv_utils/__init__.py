@@ -186,7 +186,7 @@ def getFunctionArgs(vw, fva):
     return vw.getFunctionArgs(fva)
 
 
-def getShellcodeWorkspace(buf, arch="i386", base=0x01000000, entry_point=None, should_save=False, save_path=None):
+def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=None, should_save=False, save_path=None):
     """
     Load shellcode into memory object and generate vivisect workspace.
     Thanks to Tom for most of the code.
@@ -213,7 +213,7 @@ def getShellcodeWorkspace(buf, arch="i386", base=0x01000000, entry_point=None, s
 
     if should_save:
         if save_path is None:
-            raise Exception("Failed to save workspace, destination path cannot be empty")
+            raise Exception("Failed to save workspace, destination save path cannot be empty")
         vw.setMeta("StorageName", "%s.viv" % save_path)
         vw.saveWorkspace()
 
