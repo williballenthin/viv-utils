@@ -157,6 +157,7 @@ class EmulatorDriver(object):
         if convname:
             callconv = emu.getCallingConvention(convname)
         else:
+            self._logger.debug("No call convention available at 0x%x. Using stdcall as default.", pc)
             callconv = emu.getCallingConvention("stdcall")
         argv = []
         if callconv:
@@ -236,6 +237,7 @@ class EmulatorDriver(object):
         if convname:
             callconv = emu.getCallingConvention(convname)
         else:
+            self._logger.debug("No call convention available at 0x%x. Using stdcall as default.", endpc)
             callconv = emu.getCallingConvention("stdcall")
 
         if self.doHook(endpc, op):
