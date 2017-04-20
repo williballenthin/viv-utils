@@ -9,7 +9,6 @@ requirements = [
     "funcy",
     "argparse",
     "pefile",
-    "ipython",
     "vivisect",
     "intervaltree",
 ]
