@@ -154,8 +154,14 @@ class EmulatorDriver(object):
 
         api = emu.getCallApi(pc)
         rtype, rname, convname, callname, funcargs = api
-        callconv = emu.getCallingConvention(convname)
-        argv = callconv.getCallArgs(emu, len(funcargs))
+        if convname:
+            callconv = emu.getCallingConvention(convname)
+        else:
+            self._logger.debug("No call convention available at 0x%x. Using stdcall as default.", pc)
+            callconv = emu.getCallingConvention("stdcall")
+        argv = []
+        if callconv:
+            argv = callconv.getCallArgs(emu, len(funcargs))
 
         # attempt to invoke hooks to handle function calls.
         # priority:
@@ -223,24 +229,16 @@ class EmulatorDriver(object):
 
         emu = self._emu
 
-        targetOpnd = op.getOperands()[0]
-
-        # fetch `target` that is the VA of the function
-        if targetOpnd.isDeref():
-            # maybe call through IAT, like: call [0x10008050]
-            # fetch the "0x10008050"
-            target = targetOpnd.getOperAddr(op, emu)
-        else:
-            # like: call 0x10008050, probably not an import
-            target = targetOpnd.getOperValue(op, emu)
-
         emu.executeOpcode(op)
         endpc = emu.getProgramCounter()
 
         api = emu.getCallApi(endpc)
         rtype, rname, convname, callname, funcargs = api
-        callconv = emu.getCallingConvention(convname)
-        argv = callconv.getCallArgs(emu, len(funcargs))
+        if convname:
+            callconv = emu.getCallingConvention(convname)
+        else:
+            self._logger.debug("No call convention available at 0x%x. Using stdcall as default.", endpc)
+            callconv = emu.getCallingConvention("stdcall")
 
         if self.doHook(endpc, op):
             # some hook handled the call,

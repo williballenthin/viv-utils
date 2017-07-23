@@ -2,32 +2,26 @@
 # -*- coding: utf-8 -*-
 
 
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
+import setuptools
 
 
 requirements = [
     "funcy",
     "argparse",
     "pefile",
-    "ipython",
     "vivisect",
     "intervaltree",
 ]
 
-setup(
+setuptools.setup(
     name='viv_utils',
-    version='0.3.5',
+    version='0.3.6',
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",
     author_email='william.ballenthin@mandiant.com',
     url='https://github.mandiant.com/wballenthin/viv-utils',
-    packages=[
-        'viv_utils',
-    ],
+    packages=setuptools.find_packages(),
     package_dir={'viv_utils':'viv_utils'},
     package_data={'viv_utils': ['data/*.py']},
     entry_points={
