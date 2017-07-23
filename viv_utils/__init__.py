@@ -344,15 +344,15 @@ class CFG(object):
         self.vw = func.vw
         self.func = func
         self.bb_by_start = {bb.va: bb for bb in self.func.basic_blocks}
-        self.bb_by_end = {get_prev_opcode(vw, bb.va + bb.size).va: bb
+        self.bb_by_end = {get_prev_opcode(self.vw, bb.va + bb.size).va: bb
                           for bb in self.func.basic_blocks}
         
     def get_successor_basic_blocks(self, bb):
         next_va = bb.va + bb.size
-        op = get_prev_opcode(vw, next_va)
-        for xref in get_all_xrefs_from(vw, op.va):
+        op = get_prev_opcode(self.vw, next_va)
+        for xref in get_all_xrefs_from(self.vw, op.va):
             yield self.bb_by_start[xref[vivisect.const.XR_TO]]
     
     def get_predecessor_basic_blocks(self, bb):
-        for xref in get_all_xrefs_to(vw, bb.va):
+        for xref in get_all_xrefs_to(self.vw, bb.va):
             yield self.bb_by_end[xref[vivisect.const.XR_FROM]]
