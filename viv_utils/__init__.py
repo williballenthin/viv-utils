@@ -6,7 +6,6 @@ import tempfile
 import envi
 import funcy
 import vivisect
-import vivisect.envi
 import vivisect.const
 import intervaltree
 
@@ -318,7 +317,7 @@ def get_all_xrefs_from(vw, va):
     '''
     op = vw.parseOpcode(va)
     for tova, bflags in op.getBranches():
-        if bflags & vivisect.envi.BR_PROC:
+        if bflags & envi.BR_PROC:
             continue     
         yield (va, tova, vivisect.const.REF_CODE, bflags)
 
