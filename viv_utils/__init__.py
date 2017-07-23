@@ -339,6 +339,12 @@ def get_all_xrefs_to(vw, va):
             yield (op.va, va, vivisect.const.REF_CODE, bflags)
 
 
+def empty(s):
+    for c in s:
+        return False
+    return True
+
+
 class CFG(object):
     def __init__(self, func):
         self.vw = func.vw
@@ -359,3 +365,8 @@ class CFG(object):
 
     def get_root_basic_block(self):
         return self.bb_by_start[self.func.va]
+
+    def get_leaf_basic_blocks(self):
+        for bb in self.func.basic_blocks:
+            if empty(get_successor_basic_blocks(bb)):
+                yield bb
