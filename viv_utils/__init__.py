@@ -5,11 +5,17 @@ import inspect
 import envi
 import funcy
 import vivisect
+import vivisect.envi
+import vivisect.const
 import intervaltree
+
+
+logger = logging.getLogger(__name__)
 
 
 def getVwSampleMd5(vw):
     return vw.filemeta.values()[0]["md5sum"]
+
 
 def getWorkspace(fp, reanalyze=False, verbose=False, should_save=True):
     '''
@@ -77,6 +83,7 @@ def set_function_name(vw, va, new_name):
 def get_function_name(vw, va):
     ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(va)
     return func_name
+
 
 class Function(LoggingObject):
     def __init__(self, vw, va):
@@ -170,7 +177,6 @@ class InstructionFunctionIndex(LoggingObject):
         return v.data
 
 
-
 def getFunctionName(vw, fva):
     ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(fva)
     return func_name
@@ -206,3 +212,52 @@ def loadShellcode(baseaddr, buf, typ="RWE"):
     vw.addMemoryMap(baseaddr,envi.memory.MM_RWX, 'raw', buf)
     vw.addSegment(baseaddr, len(buf), '%.8x-%s' % (baseaddr, "RWE"), 'blob' )
     return vw
+
+
+def get_prev_opcode(vw, va):
+    prev_item = vw.getPrevLocation(va)
+    if prev_item is None:
+        raise RuntimeError('failed to find prev instruction for va: %x', va)
+        
+    lva, lsize, ltype, linfo = prev_item
+    if ltype != vivisect.const.LOC_OP:
+        raise RuntimeError('failed to find prev instruction for va: %x', va)
+        
+    try:
+        op = vw.parseOpcode(lva)
+    except Exception:
+        logger.warning('failed to parse prev instruction for va: %x', va)
+        raise
+        
+    return op
+
+
+def get_all_xrefs_from(vw, va):
+    '''
+    get all xrefs, including fallthrough instructions, from this address.
+    
+    vivisect doesn't consider fallthroughs as xrefs.
+    see: https://github.com/fireeye/flare-ida/blob/7207a46c18a81ad801720ce0595a151b777ef5d8/python/flare/jayutils.py#L311
+    '''
+    op = vw.parseOpcode(va)
+    for tova, bflags in op.getBranches():
+        if bflags & vivisect.envi.BR_PROC:
+            continue     
+        yield (va, tova, vivisect.const.REF_CODE, bflags)
+
+
+def get_all_xrefs_to(vw, va):
+    '''
+    get all xrefs, including fallthrough instructions, to this address.
+        
+    vivisect doesn't consider fallthroughs as xrefs.
+    see: https://github.com/fireeye/flare-ida/blob/7207a46c18a81ad801720ce0595a151b777ef5d8/python/flare/jayutils.py#L311
+    '''
+    for xref in vw.getXrefsTo(va):
+        yield xref
+    
+    op = get_prev_opcode(vw, va)
+         
+    for tova, bflags in op.getBranches():
+        if tova == va:
+            yield (op.va, va, vivisect.const.REF_CODE, bflags)
