@@ -356,3 +356,6 @@ class CFG(object):
     def get_predecessor_basic_blocks(self, bb):
         for xref in get_all_xrefs_to(self.vw, bb.va):
             yield self.bb_by_end[xref[vivisect.const.XR_FROM]]
+
+    def get_root_basic_block(self):
+        return self.bb_by_start[self.func.va]
