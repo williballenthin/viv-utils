@@ -337,3 +337,22 @@ def get_all_xrefs_to(vw, va):
     for tova, bflags in op.getBranches():
         if tova == va:
             yield (op.va, va, vivisect.const.REF_CODE, bflags)
+
+
+class CFG(object):
+    def __init__(self, func):
+        self.vw = func.vw
+        self.func = func
+        self.bb_by_start = {bb.va: bb for bb in self.func.basic_blocks}
+        self.bb_by_end = {get_prev_opcode(vw, bb.va + bb.size).va: bb
+                          for bb in self.func.basic_blocks}
+        
+    def get_successor_basic_blocks(self, bb):
+        next_va = bb.va + bb.size
+        op = get_prev_opcode(vw, next_va)
+        for xref in get_all_xrefs_from(vw, op.va):
+            yield self.bb_by_start[xref[vivisect.const.XR_TO]]
+    
+    def get_predecessor_basic_blocks(self, bb):
+        for xref in get_all_xrefs_to(vw, bb.va):
+            yield self.bb_by_end[xref[vivisect.const.XR_FROM]]
