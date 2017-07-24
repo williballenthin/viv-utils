@@ -357,11 +357,21 @@ class CFG(object):
         next_va = bb.va + bb.size
         op = get_prev_opcode(self.vw, next_va)
         for xref in get_all_xrefs_from(self.vw, op.va):
-            yield self.bb_by_start[xref[vivisect.const.XR_TO]]
-    
+            try:
+                yield self.bb_by_start[xref[vivisect.const.XR_TO]]
+            except KeyError:
+                # if we have a jump to the import table,
+                # the target of the jump is not a basic block in the function.
+                continue
+
     def get_predecessor_basic_blocks(self, bb):
         for xref in get_all_xrefs_to(self.vw, bb.va):
-            yield self.bb_by_end[xref[vivisect.const.XR_FROM]]
+            try:
+                yield self.bb_by_end[xref[vivisect.const.XR_FROM]]
+            except KeyError:
+                # if we have a jump to the import table,
+                # the target of the jump is not a basic block in the function.
+                continue
 
     def get_root_basic_block(self):
         return self.bb_by_start[self.func.va]
