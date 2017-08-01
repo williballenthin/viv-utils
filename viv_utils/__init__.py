@@ -400,5 +400,5 @@ class CFG(object):
 
     def get_leaf_basic_blocks(self):
         for bb in self.func.basic_blocks:
-            if empty(get_successor_basic_blocks(bb)):
+            if empty(self.get_successor_basic_blocks(bb)):
                 yield bb
