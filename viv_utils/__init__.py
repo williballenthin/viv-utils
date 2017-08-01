@@ -352,26 +352,48 @@ class CFG(object):
         self.bb_by_start = {bb.va: bb for bb in self.func.basic_blocks}
         self.bb_by_end = {get_prev_opcode(self.vw, bb.va + bb.size).va: bb
                           for bb in self.func.basic_blocks}
+        self._succ_cache = {}
+        self._pred_cache = {}
         
     def get_successor_basic_blocks(self, bb):
+        if bb.va in self._succ_cache:
+            for nbb in self._succ_cache[bb.va]:
+                yield nbb
+            return
+
+        successors = []
         next_va = bb.va + bb.size
         op = get_prev_opcode(self.vw, next_va)
         for xref in get_all_xrefs_from(self.vw, op.va):
             try:
-                yield self.bb_by_start[xref[vivisect.const.XR_TO]]
+                succ = self.bb_by_start[xref[vivisect.const.XR_TO]]
+                yield succ
+                successors.append(succ)
             except KeyError:
                 # if we have a jump to the import table,
                 # the target of the jump is not a basic block in the function.
                 continue
 
+        self._succ_cache[bb.va] = successors
+
     def get_predecessor_basic_blocks(self, bb):
+        if bb.va in self._pred_cache:
+            for nbb in self._pred_cache[bb.va]:
+                yield nbb
+            return
+
+        predecessors = []
         for xref in get_all_xrefs_to(self.vw, bb.va):
             try:
-                yield self.bb_by_end[xref[vivisect.const.XR_FROM]]
+                pred = self.bb_by_end[xref[vivisect.const.XR_FROM]]
+                yield pred
+                predecessors.append(pred)
             except KeyError:
                 # if we have a jump to the import table,
                 # the target of the jump is not a basic block in the function.
                 continue
+
+        self._pred_cache[bb.va] = predecessors
 
     def get_root_basic_block(self):
         return self.bb_by_start[self.func.va]
