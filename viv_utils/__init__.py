@@ -25,7 +25,9 @@ def getWorkspace(fp, reanalyze=False, verbose=False, should_save=True):
     '''
     vw = vivisect.VivWorkspace()
     vw.verbose = verbose
-    vw.config.viv.parsers.pe.nx = True
+    # this is pretty insance, but simply prop assignment doesn't work.
+    vw.config.getSubConfig('viv').getSubConfig('parsers').getSubConfig('pe')['loadresources'] = True
+    vw.config.getSubConfig('viv').getSubConfig('parsers').getSubConfig('pe')['nx'] = True
     if fp.endswith('.viv'):
         vw.loadWorkspace(fp)
         if reanalyze:
