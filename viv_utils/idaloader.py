@@ -76,7 +76,7 @@ def get_data(start, size):
     Returns:
       bytes: `size` bytes, filled with NULL when byte not available from database.
     '''
-    # best, case, works pretty often.
+    # best case, works pretty often.
     buf = idc.GetManyBytes(start, size)
     if buf:
         return buf
@@ -117,7 +117,7 @@ def get_segment_data(segstart):
     for i in range(pagecount):
         bufs.append(get_data(segstart + i * PAGE_SIZE, PAGE_SIZE))
 
-    # in a real PE, these *should* be page- or section- aligned, but its not guaranteed, esp in IDA.
+    # in a real PE, these *should* be page- or sector-aligned, but its not guaranteed, esp in IDA.
     if remainder != 0:
         bufs.append(get_data(segstart + pagecount * PAGE_SIZE, remainder))
 
@@ -130,7 +130,7 @@ def get_exports():
     enumerate the exports of the currently loaded module.
 
     Yields:
-      Tuple[int, int, int, str]:
+      Tuple[int, int, str]:
         - address of exported function
         - export ordinal
         - name of exported function
@@ -145,7 +145,7 @@ def get_imports():
     enumerate the imports of the currently loaded module.
 
     Yields:
-      Tuple[int, int, int, str]:
+      Tuple[int, str, str, int]:
         - address of import table pointer
         - name of imported library
         - name of imported function
@@ -159,7 +159,7 @@ def get_imports():
         entries = []
         def cb(ea, name, ordinal):
             entries.append((ea, name, ordinal))
-            return True
+            return True  # continue enumeration
 
         idaapi.enum_import_names(i, cb)
 
@@ -210,8 +210,11 @@ def get_functions():
 @requires_ida
 def loadWorkspaceFromIdb():
     '''
-    load the currently loaded module into a vivisect workspace.
+    from IDA Pro, load the currently loaded module into a vivisect workspace.
     currently only supports windows PE files.
+
+    Returns:
+      vivisect.Workspace: the loaded and analyzed vivisect workspace.
     '''
     vw = vivisect.VivWorkspace()
 
