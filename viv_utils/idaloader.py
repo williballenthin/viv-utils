@@ -103,6 +103,20 @@ def get_imports():
 
 
 @requires_ida
+def get_import_thunk(import_addr):
+    for xref in idautils.XrefsTo(import_addr):
+        if xref.type != 3:  # XrefTypeName(3) == 'Data_Read'
+            continue
+
+        if idc.GetMnem(xref.frm) != 'jmp':
+            continue
+
+        return xref.frm
+
+    raise ValueError('thunk does not exist')
+
+
+@requires_ida
 def get_functions():
     startea = idc.BeginEA()
     for fva in idautils.Functions(idc.SegStart(startea), idc.SegEnd(startea)):
@@ -156,5 +170,16 @@ def loadWorkspaceFromIdb():
         logger.debug('marking function %s at %x', idc.GetFunctionName(fva), fva)
         vw.makeFunction(fva)
         vw.makeName(fva, idc.GetFunctionName(fva))
+
+    # can only set thunk-ness after a function is defined.
+    for ea, dllname, name, ordinal in get_imports():
+        try:
+            thunk = get_import_thunk(ea)
+        except ValueError:
+            pass
+        else:
+            logger.debug('found thunk for %s.%s at %x', dllname, name, thunk)
+            vw.makeFunction(thunk)
+            vw.makeFunctionThunk(thunk, '%s.%s' % (dllname, name))
 
     return vw
