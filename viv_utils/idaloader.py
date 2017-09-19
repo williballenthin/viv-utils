@@ -94,6 +94,7 @@ def get_imports():
         entries = []
         def cb(ea, name, ordinal):
             entries.append((ea, name, ordinal))
+            return True
 
         idaapi.enum_import_names(i, cb)
 
