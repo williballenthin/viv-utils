@@ -24,6 +24,10 @@ except ImportError:
 
 
 def requires_ida(f):
+    '''
+    declare that the wrapped function requires the IDA Pro scripting API.
+    calling the function will raise `RuntimeError` if the API cannot be imported.
+    '''
     @functools.wraps(f)
     def inner(*args, **kwargs):
         if not ('idc' in locals() or 'idc' in globals()):
@@ -34,29 +38,52 @@ def requires_ida(f):
 
 @requires_ida
 def is_x86():
+    '''
+    is the currently loaded module 32-bit x86?
+    '''
     inf = idaapi.get_inf_structure()
     return inf.procName == 'metapc' and inf.is_32bit()
 
 
 @requires_ida
 def is_x64():
+    '''
+    is the currently loaded module 64-bit x86?
+    '''
     inf = idaapi.get_inf_structure()
     return inf.procName == 'metapc' and inf.is_64bit()
 
 
 @requires_ida
 def is_exe():
+    '''
+    is the currently loaded module a PE file?
+    you can *probably* assume its for windows, if so.
+    '''
     return 'Portable executable' in idaapi.get_file_type_name()
 
 
 @requires_ida
-def get_page(pagestart):
-    buf = idc.GetManyBytes(pagestart, 0x1000)
+def get_data(start, size):
+    '''
+    read the given amount of data from the given start address.
+    better than `idc.GetManyBytes` as it fills in missing bytes with NULLs.
+
+    Args:
+      start (int): start address.
+      size (int): number of bytes to read.
+
+    Returns:
+      bytes: `size` bytes, filled with NULL when byte not available from database.
+    '''
+    # best, case, works pretty often.
+    buf = idc.GetManyBytes(start, size)
     if buf:
         return buf
 
+    # but may fail, when there's no byte defined.
     buf = []
-    for ea in range(pagestart, pagestart+0x1000):
+    for ea in range(start, start+size):
         b = idc.GetManyBytes(ea, 1)
         if b:
             buf.append(b)
@@ -65,27 +92,65 @@ def get_page(pagestart):
     return b''.join(buf)
 
 
+PAGE_SIZE = 0x1000
+
+
 @requires_ida
 def get_segment_data(segstart):
+    '''
+    read the contents of the segment containing the given address.
+
+    Args:
+      segstart (int): start address of a segment.
+
+    Returns:
+      bytes: the bytes of the segment, filled with NULL when byte not available from database.
+    '''
     bufs = []
 
-    pagestart = segstart
     segend = idc.SegEnd(segstart)
-    while pagestart < segend:
-        bufs.append(get_page(pagestart))
-        pagestart += 0x1000
+    segsize = segend - segstart
+    pagecount = segsize // PAGE_SIZE
+    remainder = segsize - (pagecount * PAGE_SIZE)
+
+    # read in page-sized chunks, since these should ususally be accessible together.
+    for i in range(pagecount):
+        bufs.append(get_data(segstart + i * PAGE_SIZE, PAGE_SIZE))
+
+    # in a real PE, these *should* be page- or section- aligned, but its not guaranteed, esp in IDA.
+    if remainder != 0:
+        bufs.append(get_data(segstart + pagecount * PAGE_SIZE, remainder))
 
     return b''.join(bufs)
 
 
 @requires_ida
 def get_exports():
+    '''
+    enumerate the exports of the currently loaded module.
+
+    Yields:
+      Tuple[int, int, int, str]:
+        - address of exported function
+        - export ordinal
+        - name of exported function
+    '''
     for index, ordinal, ea, name in idautils.Entries():
         yield ea, ordinal, name
 
 
 @requires_ida
 def get_imports():
+    '''
+    enumerate the imports of the currently loaded module.
+
+    Yields:
+      Tuple[int, int, int, str]:
+        - address of import table pointer
+        - name of imported library
+        - name of imported function
+        - ordinal of import
+    '''
     for i in range(idaapi.get_import_module_qty()):
         dllname = idaapi.get_import_module_name(i)
         if not dllname:
@@ -104,6 +169,19 @@ def get_imports():
 
 @requires_ida
 def get_import_thunk(import_addr):
+    '''
+    find import thunk for the given import pointer.
+    this is a function that simply jumps to the external implementation of the routine.
+
+    Args:
+      import_addr (int): address of import table pointer.
+
+    Returns:
+      int: address of function thunk.
+
+    Raises:
+      ValueError: when the thunk does not exist.
+    '''
     for xref in idautils.XrefsTo(import_addr):
         if xref.type != 3:  # XrefTypeName(3) == 'Data_Read'
             continue
@@ -118,6 +196,12 @@ def get_import_thunk(import_addr):
 
 @requires_ida
 def get_functions():
+    '''
+    enumerate the functions in the currently loaded module.
+
+    Yields:
+      int: address of the function.
+    '''
     startea = idc.BeginEA()
     for fva in idautils.Functions(idc.SegStart(startea), idc.SegEnd(startea)):
         yield fva
@@ -125,6 +209,10 @@ def get_functions():
 
 @requires_ida
 def loadWorkspaceFromIdb():
+    '''
+    load the currently loaded module into a vivisect workspace.
+    currently only supports windows PE files.
+    '''
     vw = vivisect.VivWorkspace()
 
     if is_x86():
