@@ -298,46 +298,46 @@ def get_prev_opcode(vw, va):
     prev_item = vw.getPrevLocation(va)
     if prev_item is None:
         raise RuntimeError('failed to find prev instruction for va: %x', va)
-        
+
     lva, lsize, ltype, linfo = prev_item
     if ltype != vivisect.const.LOC_OP:
         raise RuntimeError('failed to find prev instruction for va: %x', va)
-        
+
     try:
         op = vw.parseOpcode(lva)
     except Exception:
         logger.warning('failed to parse prev instruction for va: %x', va)
         raise
-        
+
     return op
 
 
 def get_all_xrefs_from(vw, va):
     '''
     get all xrefs, including fallthrough instructions, from this address.
-    
+
     vivisect doesn't consider fallthroughs as xrefs.
     see: https://github.com/fireeye/flare-ida/blob/7207a46c18a81ad801720ce0595a151b777ef5d8/python/flare/jayutils.py#L311
     '''
     op = vw.parseOpcode(va)
     for tova, bflags in op.getBranches():
         if bflags & envi.BR_PROC:
-            continue     
+            continue
         yield (va, tova, vivisect.const.REF_CODE, bflags)
 
 
 def get_all_xrefs_to(vw, va):
     '''
     get all xrefs, including fallthrough instructions, to this address.
-        
+
     vivisect doesn't consider fallthroughs as xrefs.
     see: https://github.com/fireeye/flare-ida/blob/7207a46c18a81ad801720ce0595a151b777ef5d8/python/flare/jayutils.py#L311
     '''
     for xref in vw.getXrefsTo(va):
         yield xref
-    
+
     op = get_prev_opcode(vw, va)
-         
+
     for tova, bflags in op.getBranches():
         if tova == va:
             yield (op.va, va, vivisect.const.REF_CODE, bflags)
@@ -358,7 +358,7 @@ class CFG(object):
                           for bb in self.func.basic_blocks}
         self._succ_cache = {}
         self._pred_cache = {}
-        
+
     def get_successor_basic_blocks(self, bb):
         if bb.va in self._succ_cache:
             for nbb in self._succ_cache[bb.va]:
