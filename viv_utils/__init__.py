@@ -9,6 +9,8 @@ import vivisect
 import vivisect.const
 import intervaltree
 
+from viv_utils.idaloader import loadVivFromIdb
+
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,7 @@ def getWorkspace(fp, reanalyze=False, verbose=False, should_save=True):
         else:
             vw.loadFromFile(fp)
             vw.analyze()
-            
+
     if should_save:
         vw.saveWorkspace()
 
