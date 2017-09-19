@@ -109,7 +109,7 @@ def get_functions():
 
 
 @requires_ida
-def loadVivFromIdb():
+def loadWorkspaceFromIdb():
     vw = vivisect.VivWorkspace()
 
     if is_x86():

@@ -9,7 +9,7 @@ import vivisect
 import vivisect.const
 import intervaltree
 
-from viv_utils.idaloader import loadVivFromIdb
+from viv_utils.idaloader import loadWorkspaceFromIdb
 
 
 logger = logging.getLogger(__name__)
