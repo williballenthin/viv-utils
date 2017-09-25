@@ -411,3 +411,81 @@ class CFG(object):
         for bb in self.func.basic_blocks:
             if empty(self.get_successor_basic_blocks(bb)):
                 yield bb
+
+
+def get_strings(vw):
+    '''
+    enumerate the strings in the given vivisect workspace.
+
+    Args:
+      vw (vivisect.Workspace): the workspace.
+
+    Yields:
+      Tuple[int, str]: the address, string pair.
+    '''
+    for loc in vw.getLocations(ltype=vivisect.const.LOC_STRING):
+        va = loc[vivisect.const.L_VA]
+        size = loc[vivisect.const.L_SIZE]
+        yield va, vw.readMemory(va, size).decode('ascii')
+
+    for loc in vw.getLocations(ltype=vivisect.const.LOC_UNI):
+        va = loc[vivisect.const.L_VA]
+        size = loc[vivisect.const.L_SIZE]
+        try:
+            yield va, vw.readMemory(va, size).decode('utf-16le')
+        except UnicodeDecodeError:
+            continue
+
+
+def is_valid_address(vw, va):
+    '''
+    test if the given address is valid in the given vivisect workspace.
+
+    Args:
+      vw (vivisect.Workspace): the workspace.
+      va (int): a possible memory address.
+
+    Returns:
+      bool: True if the given address is valid in the given workspace.
+    '''
+    return vw.probeMemory(va, 1, envi.memory.MM_READ)
+
+
+def get_function_constants(vw, fva):
+    '''
+    enumerate the immediate constants referenced by instructions in the given function.
+    does not yield valid addresses in the given workspace.
+
+    Args:
+      vw (vivisect.Workspace): the workspace.
+      fva (int): the address of a function in the workspace.
+
+    Yields:
+      int: immediate constant referenced by an instruction.
+    '''
+    f = Function(vw, fva)
+    for bb in f.basic_blocks:
+        for i in bb.instructions:
+            for o in i.getOperands():
+                if not o.isImmed():
+                    continue
+
+                c = o.getOperValue(i)
+                if is_valid_address(vw, c):
+                    continue
+
+                yield c
+
+
+def get_section_data(pe, section):
+    '''
+    fetch the raw data of the given section.
+
+    Args:
+      pe (PE.PE): the parsed PE file.
+      section (vstruct.VStruct): pe.IMAGE_SECTION_HEADER instance.
+
+    Returns:
+      bytes: the raw bytes of the section.
+    '''
+    return pe.readAtOffset(section.PointerToRawData, section.SizeOfRawData)
