@@ -290,7 +290,8 @@ def getWorkspaceFromFile(filepath):
     vw.verbose = True
     vw.config.viv.parsers.pe.nx = True
     vw.loadFromFile(filepath)
-    vw.analyze()
+    if analyze:
+        vw.analyze()
     return vw
 
 
