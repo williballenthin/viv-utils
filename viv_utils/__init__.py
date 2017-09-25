@@ -272,17 +272,21 @@ def loadWorkspaceFromBytes(vw, buf):
             pass
 
 
-def getWorkspaceFromBytes(buf):
+def getWorkspaceFromBytes(buf, analyze=True):
     """
     create a new vivisect workspace and load it from a
       Python string/bytes.
     """
     vw = vivisect.VivWorkspace()
+    vw.verbose = True
+    vw.config.viv.parsers.pe.nx = True
     loadWorkspaceFromBytes(vw, buf)
+    if analyze:
+        vw.analyze()
     return vw
 
 
-def getWorkspaceFromFile(filepath):
+def getWorkspaceFromFile(filepath, analyze=True):
     """
     deserialize a file into a new vivisect workspace.
     """
