@@ -195,14 +195,14 @@ def getFunctionArgs(vw, fva):
     return vw.getFunctionArgs(fva)
 
 
-def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=None, should_save=False, save_path=None):
+def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, should_save=False, save_path=None):
     """
     Load shellcode into memory object and generate vivisect workspace.
     Thanks to Tom for most of the code.
     :param buf: shellcode buffer bytes
     :param arch: architecture string
     :param base: base address where shellcode will be loaded
-    :param entry_point: entry point of shellcode
+    :param entry_point: entry point of shellcode, relative to base
     :param should_save: save workspace to disk
     :param save_path: path to save workspace to
     :return: vivisect workspace
@@ -210,14 +210,13 @@ def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=None, should_sav
     vw = vivisect.VivWorkspace()
     vw.setMeta('Architecture', arch)
     vw.setMeta('Platform', 'windows')
-    vw.setMeta('Format', 'pe')
+    vw.setMeta('Format', 'pe')  # blob gives weaker results in some cases
     vw._snapInAnalysisModules()
 
     vw.addMemoryMap(base, envi.memory.MM_RWX, 'shellcode', buf)
     vw.addSegment(base, len(buf), 'shellcode_0x%x' % base, 'blob')
 
-    if entry_point:
-        vw.addEntryPoint(base + entry_point)
+    vw.addEntryPoint(base + entry_point)  # defaults to start of shellcode
     vw.analyze()
 
     if should_save:
