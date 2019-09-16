@@ -1,10 +1,13 @@
 import os
+import struct
 import logging
 import inspect
 import tempfile
 
+import vdb
 import envi
 import funcy
+import vtrace
 import vivisect
 import vivisect.const
 import intervaltree
@@ -488,3 +491,88 @@ def get_section_data(pe, section):
       bytes: the raw bytes of the section.
     '''
     return pe.readAtOffset(section.PointerToRawData, section.SizeOfRawData)
+
+
+class Debugger(object):
+    REGISTERS = {
+        "eax",
+        "ebx",
+        "ecx",
+        "edx",
+        "esi",
+        "edi",
+        "esp",
+        "ebp",
+        "eip",
+    }
+
+    def __init__(self, v):
+        super(Debugger, self).__init__()
+        self.v = v
+
+    def __getattr__(self, k):
+        '''
+        support reg access shortcut, like::
+            print(hex(dbg.pc))
+            print(hex(dbg.rax))
+        register names are lowercase.
+        `pc` is a shortcut for the platform program counter.
+        '''
+        if k == 'v':
+            return super(object, self).__getattr__(k)
+        elif k == 'pc' or k == 'program_counter':
+            return self.v.getTrace().getRegisterByName("eip")
+        elif k == 'stack_pointer':
+            return self.v.getTrace().getRegisterByName("esp")
+        elif k == 'base_pointer':
+            return self.v.getTrace().getRegisterByName("ebp")
+        elif k in self.REGISTERS:
+            return self.v.getTrace().getRegisterByName(k)
+        else:
+            return self.v.__getattribute__(k)
+
+    def __setattr__(self, k, v):
+        '''
+        set reg shortcut, like::
+            dbg.pc  = 0x401000
+            dbg.rax = 0xAABBCCDD
+        register names are lowercase.
+        `pc` is a shortcut for the platform program counter.
+        '''
+        if k == 'v':
+            object.__setattr__(self, k, v)
+        elif k == 'pc' or k == 'program_counter':
+            return self.v.getTrace().setRegisterByName("eip", v)
+        elif k == 'stack_pointer':
+            return self.v.getTrace().setRegisterByName("esp", v)
+        elif k == 'base_pointer':
+            return self.v.getTrace().setRegisterByName("ebp", v)
+        elif k in self.REGISTERS:
+            return self.v.getTrace().setRegisterByName(k, v)
+        else:
+            return self.v.__setattribute__(k, v)
+
+    def write_memory(self, va, buf):
+        self.v.memobj.writeMemory(va, buf)
+
+    def read_memory(self, va, size):
+        return self.v.trace.readMemory(va, size)
+
+    def read_dword(self, va):
+        return struct.unpack("<I", self.read_memory(va, 4))[0]
+
+    def write_dword(self, va, v):
+        self.write_memory(va, struct.pack("<I", v))
+
+    def read_ascii(self, va):
+        buf = self.read_memory(va, 1024)
+        return buf.partition(b'\x00')[0].decode('ascii')
+
+    def pop(self):
+        v = self.read_dword(self.esp)
+        self.esp = self.esp + 4
+        return v
+
+    def push(self, v):
+        self.esp = self.esp - 4
+        self.write_dword(self.esp, v)
