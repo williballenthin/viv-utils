@@ -3,11 +3,10 @@ import struct
 import logging
 import inspect
 import tempfile
+import pkg_resources
 
-import vdb
 import envi
 import funcy
-import vtrace
 import vivisect
 import vivisect.const
 import intervaltree
@@ -20,6 +19,37 @@ logger = logging.getLogger(__name__)
 
 def getVwSampleMd5(vw):
     return vw.filemeta.values()[0]["md5sum"]
+
+
+# while building and testing capa,
+# we found that upstream changes to vivisect did not play well with existing serialized vivisect analysis results.
+# this manifested as confusing or incorrect .viv file contents - and our tests would suddenly fail.
+# so,
+# we embed the installed vivisect library version in vivisect workspaces created by viv-utils.
+# when we load a .viv, then we assert that the versions match.
+# if they don't, emit a warning.
+# ideally, we'd bail, but the vivisect distribution situation is already a mess, so let's not further touch that.
+
+def getVivisectLibraryVersion():
+    # ref: https://stackoverflow.com/questions/710609/checking-a-python-module-version-at-runtime
+    return pkg_resources.get_distribution("vivisect").version
+
+
+def setVwVivisectLibraryVersion(vw):
+    vw.config.getSubConfig('viv')['version'] = getVivisectLibraryVersion()
+
+
+def getVwVivisectLibraryVersion(vw):
+    return vw.config.getSubConfig('viv').get('version')
+
+
+def assertVwMatchesVivisectLibrary(vw):
+    wanted = getVivisectLibraryVersion()
+    found = getVwVivisectLibraryVersion(vw)
+    if wanted != found:
+        logger.warning("vivisect version mismatch! wanted: %s, found: %s", wanted, found)
+    else:
+        logger.debug("vivisect version match: %s", wanted)
 
 
 def getWorkspace(fp, reanalyze=False, verbose=False, should_save=True):
@@ -35,15 +65,20 @@ def getWorkspace(fp, reanalyze=False, verbose=False, should_save=True):
     vw.config.getSubConfig('viv').getSubConfig('parsers').getSubConfig('pe')['nx'] = True
     if fp.endswith('.viv'):
         vw.loadWorkspace(fp)
+        assertVwMatchesVivisectLibrary(vw)
         if reanalyze:
+            setVwVivisectLibraryVersion(vw)
             vw.analyze()
     else:
         if os.path.exists(fp + ".viv"):
             vw.loadWorkspace(fp + ".viv")
+            assertVwMatchesVivisectLibrary(vw)
             if reanalyze:
+                setVwVivisectLibraryVersion(vw)
                 vw.analyze()
         else:
             vw.loadFromFile(fp)
+            setVwVivisectLibraryVersion(vw)
             vw.analyze()
 
     if should_save:
@@ -220,6 +255,8 @@ def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, should_save=F
     vw.addSegment(base, len(buf), 'shellcode_0x%x' % base, 'blob')
 
     vw.addEntryPoint(base + entry_point)  # defaults to start of shellcode
+
+    setVwVivisectLibraryVersion(vw)
     vw.analyze()
 
     if should_save:
@@ -265,6 +302,7 @@ def loadWorkspaceFromBytes(vw, buf):
         with open(temp_path, "wb") as f:
             f.write(buf)
         vw.loadWorkspace(temp_path)
+        assertVwMatchesVivisectLibrary(vw)
         # note: here's the exit point.
         return vw
     finally:
@@ -283,7 +321,9 @@ def getWorkspaceFromBytes(buf, analyze=True):
     vw.verbose = True
     vw.config.viv.parsers.pe.nx = True
     loadWorkspaceFromBytes(vw, buf)
+    assertVwMatchesVivisectLibrary(vw)
     if analyze:
+        setVwVivisectLibraryVersion(vw)
         vw.analyze()
     return vw
 
@@ -296,7 +336,9 @@ def getWorkspaceFromFile(filepath, analyze=True):
     vw.verbose = True
     vw.config.viv.parsers.pe.nx = True
     vw.loadFromFile(filepath)
+    setVwVivisectLibraryVersion(vw)
     if analyze:
+        setVwVivisectLibraryVersion(vw)
         vw.analyze()
     return vw
 
