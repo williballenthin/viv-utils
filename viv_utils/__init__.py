@@ -2,6 +2,7 @@ import os
 import struct
 import logging
 import inspect
+import hashlib
 import tempfile
 import pkg_resources
 
@@ -245,7 +246,11 @@ def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, should_save=F
     :param save_path: path to save workspace to
     :return: vivisect workspace
     """
+    md5 = hashlib.md5()
+    md5.update(buf)
+
     vw = vivisect.VivWorkspace()
+    vw.addFile('shellcode', base, md5.hexdigest())
     vw.setMeta('Architecture', arch)
     vw.setMeta('Platform', 'windows')
     vw.setMeta('Format', 'pe')  # blob gives weaker results in some cases
