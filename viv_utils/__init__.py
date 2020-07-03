@@ -253,7 +253,9 @@ def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, should_save=F
     vw.addFile('shellcode', base, md5.hexdigest())
     vw.setMeta('Architecture', arch)
     vw.setMeta('Platform', 'windows')
-    vw.setMeta('Format', 'pe')  # blob gives weaker results in some cases
+    # blob gives weaker results in some cases
+    # so we will update this below
+    vw.setMeta('Format', 'pe')
     vw._snapInAnalysisModules()
 
     vw.addMemoryMap(base, envi.memory.MM_RWX, 'shellcode', buf)
@@ -263,6 +265,8 @@ def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, should_save=F
 
     setVwVivisectLibraryVersion(vw)
     vw.analyze()
+
+    vw.setMeta('Format', 'blob')
 
     if should_save:
         if save_path is None:
