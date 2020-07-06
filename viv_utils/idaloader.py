@@ -20,7 +20,7 @@ try:
     import idaapi
     import idautils
 except ImportError:
-    logger.info('failed to import IDA Pro modules')
+    logger.debug('failed to import IDA Pro modules')
 
 
 def requires_ida(f):
