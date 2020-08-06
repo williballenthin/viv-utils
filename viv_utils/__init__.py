@@ -30,10 +30,15 @@ def getVwSampleMd5(vw):
 # when we load a .viv, then we assert that the versions match.
 # if they don't, emit a warning.
 # ideally, we'd bail, but the vivisect distribution situation is already a mess, so let's not further touch that.
+# to minimize unexpected dependencies this check is ignored if a package does not embed the vivisect version
 
 def getVivisectLibraryVersion():
     # ref: https://stackoverflow.com/questions/710609/checking-a-python-module-version-at-runtime
-    return pkg_resources.get_distribution("vivisect").version
+    try:
+        return pkg_resources.get_distribution("vivisect").version
+    except pkg_resources.DistributionNotFound:
+        logger.debug("package does not include vivisect distribution")
+    return 'N/A'
 
 
 def setVwVivisectLibraryVersion(vw):
