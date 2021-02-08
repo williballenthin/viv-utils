@@ -42,11 +42,11 @@ def getVivisectLibraryVersion():
 
 
 def setVwVivisectLibraryVersion(vw):
-    vw.config.getSubConfig('viv')['version'] = getVivisectLibraryVersion()
+    vw.setMeta("version", getVivisectLibraryVersion())
 
 
 def getVwVivisectLibraryVersion(vw):
-    return vw.config.getSubConfig('viv').get('version')
+    return vw.getMeta("version")
 
 
 def assertVwMatchesVivisectLibrary(vw):
