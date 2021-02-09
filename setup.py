@@ -15,12 +15,12 @@ requirements = [
 
 setuptools.setup(
     name='viv_utils',
-    version='0.3.17',
+    version='0.3.19',
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",
     author_email='william.ballenthin@mandiant.com',
-    url='https://github.mandiant.com/wballenthin/viv-utils',
+    url='https://github.com/williballenthin/viv-utils',
     packages=setuptools.find_packages(),
     package_dir={'viv_utils':'viv_utils'},
     package_data={'viv_utils': ['data/*.py']},
