@@ -58,7 +58,7 @@ def assertVwMatchesVivisectLibrary(vw):
         logger.debug("vivisect version match: %s", wanted)
 
 
-def getWorkspace(fp, reanalyze=False, verbose=False, should_save=True):
+def getWorkspace(fp, analyze=True, reanalyze=False, verbose=False, should_save=True):
     '''
     For a file path return a workspace, it will create one if the extension
     is not .viv, otherwise it will load the existing one. Reanalyze will cause
@@ -66,7 +66,7 @@ def getWorkspace(fp, reanalyze=False, verbose=False, should_save=True):
     '''
     vw = vivisect.VivWorkspace()
     vw.verbose = verbose
-    # this is pretty insance, but simply prop assignment doesn't work.
+    # this is pretty insane, but simply prop assignment doesn't work.
     vw.config.getSubConfig('viv').getSubConfig('parsers').getSubConfig('pe')['loadresources'] = True
     vw.config.getSubConfig('viv').getSubConfig('parsers').getSubConfig('pe')['nx'] = True
     if fp.endswith('.viv'):
@@ -84,8 +84,9 @@ def getWorkspace(fp, reanalyze=False, verbose=False, should_save=True):
                 vw.analyze()
         else:
             vw.loadFromFile(fp)
-            setVwVivisectLibraryVersion(vw)
-            vw.analyze()
+            if analyze:
+                setVwVivisectLibraryVersion(vw)
+                vw.analyze()
 
     if should_save:
         vw.saveWorkspace()
@@ -239,7 +240,7 @@ def getFunctionArgs(vw, fva):
     return vw.getFunctionArgs(fva)
 
 
-def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, should_save=False, save_path=None):
+def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, analyze=True, should_save=False, save_path=None):
     """
     Load shellcode into memory object and generate vivisect workspace.
     Thanks to Tom for most of the code.
@@ -268,8 +269,9 @@ def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, should_save=F
 
     vw.addEntryPoint(base + entry_point)  # defaults to start of shellcode
 
-    setVwVivisectLibraryVersion(vw)
-    vw.analyze()
+    if analyze:
+        setVwVivisectLibraryVersion(vw)
+        vw.analyze()
 
     vw.setMeta('Format', 'blob')
 
