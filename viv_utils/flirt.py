@@ -3,6 +3,7 @@ import logging
 # this is py3 only
 import flirt
 import vivisect
+import vivisect.const
 import viv_utils
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ def get_match_name(match):
     raise ValueError("flirt: match: no best name: %s", match.names)
 
 
-def match_function_flirt_signatures(matcher: flirt.FlirtMatcher, vw: vivisect.VivWorkspace, va: int):
+def match_function_flirt_signatures(matcher: flirt.FlirtMatcher, vw: vivisect.VivWorkspace, va: int, cache=None):
     """
     match the given FLIRT signatures against the function at the given address.
     upon success, update the workspace with match metadata, setting the
@@ -96,19 +97,42 @@ def match_function_flirt_signatures(matcher: flirt.FlirtMatcher, vw: vivisect.Vi
       match (flirt.FlirtMatcher): the compiled FLIRT signature matcher.
       vw (vivisect.workspace): the analyzed program's workspace.
       va (int): the virtual address of a function to match.
+      cache (Optional[Dict[int, Union[str, None]]]): internal cache of matches VA -> name or None on "no match".
+       no need to provide as external caller.
 
     returns:
       Optional[str]: the recognized function name, or `None`.
     """
+    if cache is None:
+        # we cache both successful and failed lookups.
+        #
+        # (callers of this function don't need to initialize the cache.
+        #  we'll provide one during recursive calls when we need it.)
+        #
+        # while we can use funcmeta to retrieve existing successful matches,
+        # we don't persist failed matches,
+        # because another FLIRT matcher might come along with better knowledge.
+        #
+        # however, when we match reference names, especially chained together,
+        # then we need to cache the negative result, or we do a ton of extra work.
+        # "accidentally quadratic" or worse.
+        # see https://github.com/fireeye/capa/issues/448
+        cache = {}
+
     function_meta = vw.funcmeta.get(va)
     if not function_meta:
         # not a function, we're not going to consider this.
         return None
 
+    if va in cache:
+        return cache[va]
+
     if is_library_function(vw, va):
         # already matched here.
         # this might be the case if recursive matching visited this address.
-        return viv_utils.get_function_name(vw, va)
+        name = viv_utils.get_function_name(vw, va)
+        cache[va] = name
+        return name
 
     # 0x200 comes from:
     #  0x20 bytes for default byte signature size in flirt
@@ -143,13 +167,6 @@ def match_function_flirt_signatures(matcher: flirt.FlirtMatcher, vw: vivisect.Vi
             # then all the references have been validated.
             does_match_references = True
 
-            #logger.debug("references needed for name %s for function at 0x%x: %s", get_match_name(match), va, references)
-
-            # when a reference is used to differentiate rule matches,
-            # then we can expect multiple rules to query the name of the same address.
-            # so, this caches the names looked up in the below loop.
-            # type: Map[int, str]
-            local_names = {}
             for (ref_name, _, ref_offset) in references:
                 ref_va = va + ref_offset
 
@@ -161,9 +178,6 @@ def match_function_flirt_signatures(matcher: flirt.FlirtMatcher, vw: vivisect.Vi
                 # so we loop through all code references,
                 # searching for that name.
                 #
-                # TODO: if we assume there is a single code reference, this is a lot easier.
-                # can we do that with FLIRT?
-                #
                 # if the name is found, then this flag will be set.
                 does_match_the_reference = False
                 for xref in vw.getXrefsFrom(loc_va):
@@ -173,17 +187,7 @@ def match_function_flirt_signatures(matcher: flirt.FlirtMatcher, vw: vivisect.Vi
                         continue
 
                     target = xref[vivisect.const.XR_TO]
-                    if target in local_names:
-                        # fast path: a prior loop already looked up this address.
-                        found_name = local_names[target]
-                    else:
-                        # this is a bit slower, since we have to read buf, do match, etc.
-                        # note that we don't ever save "this is not a library function",
-                        # so there's not an easy way to short circuit at the start of this function.
-                        found_name = match_function_flirt_signatures(matcher, vw, target)
-                        local_names[target] = found_name
-
-                    #logger.debug("reference: 0x%x: 0x%x: wanted: %s found: %s", loc_va, target, ref_name, found_name)
+                    found_name = match_function_flirt_signatures(matcher, vw, target, cache)
 
                     if found_name == ref_name:
                         does_match_the_reference = True
@@ -211,11 +215,17 @@ def match_function_flirt_signatures(matcher: flirt.FlirtMatcher, vw: vivisect.Vi
         if len(names) == 1:
             name = names[0]
             add_function_flirt_match(vw, va, name)
+            cache[va] = name
             logger.debug("found library function: 0x%x: %s", va, name)
             return name
         else:
+            cache[va] = None
             logger.warning("conflicting names: 0x%x: %s", va, names)
             return None
+
+    else:
+        cache[va] = None
+        return None
 
 
 class FlirtFunctionAnalyzer:
