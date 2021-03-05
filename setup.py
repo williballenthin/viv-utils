@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
-
+import sys
 import setuptools
-
 
 requirements = [
     "funcy",
@@ -13,9 +11,15 @@ requirements = [
     "intervaltree",
 ]
 
+extras_requirements = {}
+if sys.version_info >= (3, 0):
+    extras_requirements["flirt"] = [
+        "python-flirt==0.5.5",
+    ]
+
 setuptools.setup(
     name='viv_utils',
-    version='0.3.19',
+    version='0.4.1',
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",
@@ -33,6 +37,7 @@ setuptools.setup(
     include_package_data=True,
     install_requires=requirements,
     zip_safe=False,
+    extras_require=extras_requirements,
     keywords='viv_utils',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
