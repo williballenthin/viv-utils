@@ -5,6 +5,7 @@ import inspect
 import hashlib
 import tempfile
 import pkg_resources
+import sys
 
 import envi
 import funcy
@@ -17,6 +18,9 @@ from viv_utils.idaloader import loadWorkspaceFromIdb
 
 logger = logging.getLogger(__name__)
 
+
+class IncompatibleVivVersion(ValueError):
+    pass
 
 def getVwSampleMd5(vw):
     return vw.filemeta.values()[0]["md5sum"]
@@ -58,6 +62,16 @@ def assertVwMatchesVivisectLibrary(vw):
         logger.debug("vivisect version match: %s", wanted)
 
 
+def loadWorkspaceFromViv(vw, viv_file):
+    if sys.version_info >= (3, 0):
+        try:
+            vw.loadWorkspace(viv_file)
+        except UnicodeDecodeError as e:
+            raise IncompatibleVivVersion("'%s' is an invalid .viv file. It may have been generated with Python 2 (incompatible with Python 3)." % viv_file) from e
+    else:
+        vw.loadWorkspace(viv_file)
+
+
 def getWorkspace(fp, analyze=True, reanalyze=False, verbose=False, should_save=True):
     '''
     For a file path return a workspace, it will create one if the extension
@@ -70,14 +84,15 @@ def getWorkspace(fp, analyze=True, reanalyze=False, verbose=False, should_save=T
     vw.config.getSubConfig('viv').getSubConfig('parsers').getSubConfig('pe')['loadresources'] = True
     vw.config.getSubConfig('viv').getSubConfig('parsers').getSubConfig('pe')['nx'] = True
     if fp.endswith('.viv'):
-        vw.loadWorkspace(fp)
+        loadWorkspaceFromViv(vw, fp)
         assertVwMatchesVivisectLibrary(vw)
         if reanalyze:
             setVwVivisectLibraryVersion(vw)
             vw.analyze()
     else:
-        if os.path.exists(fp + ".viv"):
-            vw.loadWorkspace(fp + ".viv")
+        viv_file = fp + ".viv"
+        if os.path.exists(viv_file):
+            loadWorkspaceFromViv(vw, viv_file)
             assertVwMatchesVivisectLibrary(vw)
             if reanalyze:
                 setVwVivisectLibraryVersion(vw)
