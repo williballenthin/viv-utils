@@ -67,7 +67,7 @@ def loadWorkspaceFromViv(vw, viv_file):
         try:
             vw.loadWorkspace(viv_file)
         except UnicodeDecodeError as e:
-            raise IncompatibleVivVersion("'%s' is an invalid .viv file. It may have been generated with Python 2 (incompatible with Python 3)." % viv_file) from e
+            raise IncompatibleVivVersion("'%s' is an invalid .viv file. It may have been generated with Python 2 (incompatible with Python 3)." % viv_file)
     else:
         vw.loadWorkspace(viv_file)
 
