@@ -85,7 +85,7 @@ def get_match_name(match):
     raise ValueError("flirt: match: no best name: %s", match.names)
 
 
-def match_function_flirt_signatures(matcher: flirt.FlirtMatcher, vw: vivisect.VivWorkspace, va: int, cache=None):
+def match_function_flirt_signatures(matcher, vw, va, cache=None):
     """
     match the given FLIRT signatures against the function at the given address.
     upon success, update the workspace with match metadata, setting the
@@ -229,7 +229,7 @@ def match_function_flirt_signatures(matcher: flirt.FlirtMatcher, vw: vivisect.Vi
 
 
 class FlirtFunctionAnalyzer:
-    def __init__(self, matcher: flirt.FlirtMatcher, name=None):
+    def __init__(self, matcher, name=None):
         self.matcher = matcher
         self.name = name
 
@@ -243,7 +243,7 @@ class FlirtFunctionAnalyzer:
             return f"{self.__class__.__name__}"
 
 
-def addFlirtFunctionAnalyzer(vw: vivisect.VivWorkspace, analyzer: FlirtFunctionAnalyzer):
+def addFlirtFunctionAnalyzer(vw, analyzer):
     # this is basically the logic in `vivisect.VivWorkspace.addFuncAnalysisModule`.
     # however, that routine assumes the analyzer is a Python module, which is basically a global,
     # and i am very against globals.
