@@ -1,9 +1,9 @@
 import logging
 
 # this is py3 only
-import flirt
 import vivisect
 import vivisect.const
+import vivisect.exc
 import viv_utils
 
 logger = logging.getLogger(__name__)
@@ -264,17 +264,25 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
             # if not, this is a candidate for a function.
             continue
 
-        add_function_flirt_match(vw, va + offset, name)
-        cache[va + offset] = name
-        logger.debug("found local function name: 0x%x: %s", va + offset, name)
+        try:
+            add_function_flirt_match(vw, va + offset, name)
+        except vivisect.exc.InvalidFunction:
+            continue
+        else:
+            cache[va + offset] = name
+            logger.debug("found local function name: 0x%x: %s", va + offset, name)
 
     for (name, type_, offset) in match.names:
         if type_ != "public":
             continue
 
-        add_function_flirt_match(vw, va + offset, name)
-        cache[va + offset] = name
-        logger.debug("found library function: 0x%x: %s", va + offset, name)
+        try:
+            add_function_flirt_match(vw, va + offset, name)
+        except vivisect.exc.InvalidFunction:
+            continue
+        else:
+            cache[va + offset] = name
+            logger.debug("found library function: 0x%x: %s", va + offset, name)
 
     return
 
