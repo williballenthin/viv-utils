@@ -14,6 +14,20 @@ logger = logging.getLogger(__name__)
 _LIBRARY_META_KEY = "is-library"
 
 
+def is_function(vw, va):
+    """
+    is the given address a function?
+
+    args:
+      vw (vivisect.Workspace):
+      va (int): the virtual address
+
+    returns:
+      bool: if the function is recognized as a function.
+    """
+    return va in vw.funcmeta
+
+
 def is_library_function(vw, va):
     """
     is the function at the given address a library function?
@@ -232,6 +246,28 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
     # there's one candidate name,
     # so all the matches *should* be about the same, i'd assume.
     match = matches[0]
+
+    # first add local names, then we'll do public names
+    # this way public names have precedence.
+    # see: https://github.com/williballenthin/lancelot/issues/112#issuecomment-802221966
+    for (name, type_, offset) in match.names:
+        if type_ != "local":
+            continue
+
+        if not is_function(vw, va + offset):
+            # TODO: is there a race here with vivisect finding functions?
+            # when we're registered as a function analyzer,
+            # then we're called as each function is encountered,
+            # so addresses named here may not yet have been seen.
+            #
+            # TODO: we should probably check the location to see if its been explored yet.
+            # if not, this is a candidate for a function.
+            continue
+
+        add_function_flirt_match(vw, va + offset, name)
+        cache[va + offset] = name
+        logger.debug("found local function name: 0x%x: %s", va + offset, name)
+
     for (name, type_, offset) in match.names:
         if type_ != "public":
             continue
