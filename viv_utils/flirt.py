@@ -207,7 +207,7 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
                     # the matching will have updated the vw in place,
                     # so now we inspect any names found at the target location.
                     if is_library_function(vw, target):
-                        found_name = viv_utils.get_function_name(vw, va)
+                        found_name = viv_utils.get_function_name(vw, target)
                         cache[target] = found_name
                         if found_name == ref_name:
                             does_match_the_reference = True
