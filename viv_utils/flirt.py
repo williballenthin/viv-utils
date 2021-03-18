@@ -99,9 +99,6 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
       va (int): the virtual address of a function to match.
       cache (Optional[Dict[int, Union[str, None]]]): internal cache of matches VA -> name or None on "no match".
        no need to provide as external caller.
-
-    returns:
-      Optional[str]: the recognized function name, or `None`.
     """
     if cache is None:
         # we cache both successful and failed lookups.
@@ -122,17 +119,17 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
     function_meta = vw.funcmeta.get(va)
     if not function_meta:
         # not a function, we're not going to consider this.
-        return None
+        return
 
     if va in cache:
-        return cache[va]
+        return
 
     if is_library_function(vw, va):
         # already matched here.
         # this might be the case if recursive matching visited this address.
         name = viv_utils.get_function_name(vw, va)
         cache[va] = name
-        return name
+        return
 
     # as seen in https://github.com/williballenthin/lancelot/issues/112
     # Hex-Rays may distribute signatures that match across multiple functions.
@@ -191,11 +188,18 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
                         continue
 
                     target = xref[vivisect.const.XR_TO]
-                    found_name = match_function_flirt_signatures(matcher, vw, target, cache)
+                    match_function_flirt_signatures(matcher, vw, target, cache)
 
-                    if found_name == ref_name:
-                        does_match_the_reference = True
-                        break
+                    # the matching will have updated the vw in place,
+                    # so now we inspect any names found at the target location.
+                    if is_library_function(vw, target):
+                        found_name = viv_utils.get_function_name(vw, va)
+                        cache[target] = found_name
+                        if found_name == ref_name:
+                            does_match_the_reference = True
+                            break
+                    else:
+                        cache[target] = None
 
                 if not does_match_the_reference:
                     does_match_references = False
@@ -205,31 +209,38 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
                 # only if all references pass do we count it.
                 matches.append(match)
 
-    if matches:
-        # we may have multiple signatures that match the same function, like `strcpy`.
-        # these could be copies from multiple libraries.
-        # so we don't mind if there are multiple matches, as long as names are the same.
-        #
-        # but if there are multiple candidate names, that's a problem.
-        # our signatures are not precise enough.
-        # we could maybe mark the function as "is a library function", but not assign name.
-        # though, if we have signature FPs among library functions, it could easily FP with user code too.
-        # so safest thing to do is not make any claim about the function.
-        names = list(set(map(get_match_name, matches)))
-        if len(names) == 1:
-            name = names[0]
-            add_function_flirt_match(vw, va, name)
-            cache[va] = name
-            logger.debug("found library function: 0x%x: %s", va, name)
-            return name
-        else:
-            cache[va] = None
-            logger.warning("conflicting names: 0x%x: %s", va, names)
-            return None
-
-    else:
+    if not matches:
         cache[va] = None
-        return None
+        return
+
+    # we may have multiple signatures that match the same function, like `strcpy`.
+    # these could be copies from multiple libraries.
+    # so we don't mind if there are multiple matches, as long as names are the same.
+    #
+    # but if there are multiple candidate names, that's a problem.
+    # our signatures are not precise enough.
+    # we could maybe mark the function as "is a library function", but not assign name.
+    # though, if we have signature FPs among library functions, it could easily FP with user code too.
+    # so safest thing to do is not make any claim about the function.
+    names = list(set(map(get_match_name, matches)))
+
+    if len(names) != 1:
+        cache[va] = None
+        logger.warning("conflicting names: 0x%x: %s", va, names)
+        return
+
+    # there's one candidate name,
+    # so all the matches *should* be about the same, i'd assume.
+    match = matches[0]
+    for (name, type_, offset) in match.names:
+        if type_ != "public":
+            continue
+
+        add_function_flirt_match(vw, va + offset, name)
+        cache[va + offset] = name
+        logger.debug("found library function: 0x%x: %s", va + offset, name)
+
+    return
 
 
 class FlirtFunctionAnalyzer:
