@@ -287,11 +287,15 @@ class FlirtFunctionAnalyzer:
     def analyzeFunction(self, vw: vivisect.VivWorkspace, funcva: int):
         match_function_flirt_signatures(self.matcher, vw, funcva)
 
-    def __repr__(self):
+    @property
+    def __name__(self):
         if self.name:
             return f"{self.__class__.__name__} ({self.name})"
         else:
             return f"{self.__class__.__name__}"
+
+    def __repr__(self):
+        return self.__name__
 
 
 def addFlirtFunctionAnalyzer(vw, analyzer):
