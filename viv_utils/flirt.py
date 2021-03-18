@@ -134,11 +134,15 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
         cache[va] = name
         return name
 
-    # 0x200 comes from:
-    #  0x20 bytes for default byte signature size in flirt
-    #  0x100 bytes for max checksum data size
-    #  some wiggle room for tail bytes
-    size = function_meta.get("Size", 0x200)
+    # as seen in https://github.com/williballenthin/lancelot/issues/112
+    # Hex-Rays may distribute signatures that match across multiple functions.
+    # therefore, we cannot rely on fetching just a single function's data.
+    # in fact, we really don't know how much data to fetch.
+    # so, lets pick an unreasonably large number and hope it works.
+    #
+    # perf: larger the size, more to memcpy.
+    size = max(0x10000, function_meta.get("Size", 0))
+
     # viv returns truncated data at the end of sections,
     # no need for any special logic here.
     buf = vw.readMemory(va, size)
