@@ -1,6 +1,6 @@
 import logging
 
-# this is py3 only
+import envi
 import vivisect
 import vivisect.const
 import vivisect.exc
@@ -255,14 +255,16 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
             continue
 
         if not is_function(vw, va + offset):
-            # TODO: is there a race here with vivisect finding functions?
-            # when we're registered as a function analyzer,
-            # then we're called as each function is encountered,
-            # so addresses named here may not yet have been seen.
+            # since we're registered as a function analyzer,
+            # we have to deal with a race condition:
+            # the location for which we have a name may not yet be a function.
             #
-            # TODO: we should probably check the location to see if its been explored yet.
-            # if not, this is a candidate for a function.
-            continue
+            # we can detect via two facts:
+            #   - the location hasn't been processed yet
+            #   - the address is executable
+            if vw.getLocation(va + offset) is None and vw.probeMemory(va + offset, 1, envi.memory.MM_EXEC):
+                # so lets try to turn it into a function
+                vw.makeFunction(va + offset)
 
         try:
             add_function_flirt_match(vw, va + offset, name)
