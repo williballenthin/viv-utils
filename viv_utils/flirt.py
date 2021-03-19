@@ -198,7 +198,6 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
                 for xref in vw.getXrefsFrom(loc_va):
 
                     if ref_name == ".":
-                        from IPython import embed; embed()
                         # special case: reference named `.`
                         # which right now we interpret to mean "any data reference".
                         # see: https://github.com/williballenthin/lancelot/issues/112#issuecomment-802379966
