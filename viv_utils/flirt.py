@@ -14,20 +14,6 @@ logger = logging.getLogger(__name__)
 _LIBRARY_META_KEY = "is-library"
 
 
-def is_function(vw, va):
-    """
-    is the given address a function?
-
-    args:
-      vw (vivisect.Workspace):
-      va (int): the virtual address
-
-    returns:
-      bool: if the function is recognized as a function.
-    """
-    return va in vw.funcmeta
-
-
 def is_library_function(vw, va):
     """
     is the function at the given address a library function?
@@ -267,7 +253,7 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
         if type_ != "local":
             continue
 
-        if not is_function(vw, va + offset):
+        if not vw.isFunction(va + offset):
             # since we're registered as a function analyzer,
             # we have to deal with a race condition:
             # the location for which we have a name may not yet be a function.
