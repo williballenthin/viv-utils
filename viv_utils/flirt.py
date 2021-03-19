@@ -196,24 +196,38 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
                 # if the name is found, then this flag will be set.
                 does_match_the_reference = False
                 for xref in vw.getXrefsFrom(loc_va):
-                    # FLIRT signatures only match code,
-                    # so we're only going to resolve references that point to code.
-                    if xref[vivisect.const.XR_RTYPE] != vivisect.const.REF_CODE:
-                        continue
 
-                    target = xref[vivisect.const.XR_TO]
-                    match_function_flirt_signatures(matcher, vw, target, cache)
+                    if ref_name == ".":
+                        from IPython import embed; embed()
+                        # special case: reference named `.`
+                        # which right now we interpret to mean "any data reference".
+                        # see: https://github.com/williballenthin/lancelot/issues/112#issuecomment-802379966
+                        #
+                        # unfortunately, viv doesn't extract the xref for this one sample,
+                        # so this is untested.
+                        does_match_the_reference = xref[vivisect.const.XR_RTYPE] == vivisect.const.REF_DATA
 
-                    # the matching will have updated the vw in place,
-                    # so now we inspect any names found at the target location.
-                    if is_library_function(vw, target):
-                        found_name = viv_utils.get_function_name(vw, target)
-                        cache[target] = found_name
-                        if found_name == ref_name:
-                            does_match_the_reference = True
-                            break
                     else:
-                        cache[target] = None
+                        # common case
+                        #
+                        # FLIRT signatures only match code,
+                        # so we're only going to resolve references that point to code.
+                        if xref[vivisect.const.XR_RTYPE] != vivisect.const.REF_CODE:
+                            continue
+
+                        target = xref[vivisect.const.XR_TO]
+                        match_function_flirt_signatures(matcher, vw, target, cache)
+
+                        # the matching will have updated the vw in place,
+                        # so now we inspect any names found at the target location.
+                        if is_library_function(vw, target):
+                            found_name = viv_utils.get_function_name(vw, target)
+                            cache[target] = found_name
+                            if found_name == ref_name:
+                                does_match_the_reference = True
+                                break
+                        else:
+                            cache[target] = None
 
                 if not does_match_the_reference:
                     does_match_references = False
