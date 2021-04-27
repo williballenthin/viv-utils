@@ -14,7 +14,7 @@ requirements = [
 extras_requirements = {}
 if sys.version_info >= (3, 0):
     extras_requirements["flirt"] = [
-        "python-flirt==0.5.6",
+        "python-flirt==0.6.2",
     ]
 
 setuptools.setup(
