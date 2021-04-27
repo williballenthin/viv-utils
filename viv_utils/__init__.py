@@ -167,6 +167,9 @@ class Function(LoggingObject):
     def __repr__(self):
         return "Function(va: {:s})".format(hex(self.va))
 
+    def __int__(self):
+        return self.va
+
     @property
     def name(self):
         return get_function_name(self.vw, self.va)
@@ -211,6 +214,9 @@ class BasicBlock(LoggingObject):
     def __repr__(self):
         return "BasicBlock(va: {:s}, size: {:s}, fva: {:s})".format(
                 hex(self.va), hex(self.size), hex(self.fva))
+
+    def __int__(self):
+        return self.va
 
 
 def one(s):
