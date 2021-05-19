@@ -53,7 +53,7 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor, LoggingObject):
 
     def dumpStack(self, emu, num):
         self._logger.debug("stack: ESP: %s", hex(emu.getStackCounter()))
-        for i in xrange(num):
+        for i in range(num):
             self.d("stack: ESP + %s: %s",
                                hex(emu.imem_psize * i),
                                hex(self.getStackValue(emu, emu.imem_psize * i)))
@@ -177,7 +177,7 @@ class EmulatorDriver(object):
                     # not ideal, but works in the common case
                     self._logger.debug("monitor hook handled call: %s", callname)
                     return True
-            except Exception, e:
+            except Exception as e:
                 mon.logAnomaly(emu, pc,
                         "%s.apicall failed: %s" % (mon.__class__.__name__, e))
 
@@ -191,7 +191,7 @@ class EmulatorDriver(object):
                     return True
             except UnsupportedFunction:
                 continue
-            except Exception, e:
+            except Exception as e:
                 mon.logAnomaly(emu, pc,
                         "%s.apicall failed: %s" % (hook.__class__.__name__, e))
 
@@ -201,7 +201,7 @@ class EmulatorDriver(object):
                 hook(self, callconv, api, argv)
                 self._logger.debug("emu hook handled call: %s", callname)
                 return True
-            except Exception, e:
+            except Exception as e:
                 mon.logAnomaly(emu, pc,
                         "%s.apicall failed: %s" % (callname, e))
 
@@ -300,7 +300,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
     def runToCall(self, max_instruction_count=1000):
         """ stepi until ret instruction """
         emu = self._emu
-        for _ in xrange(max_instruction_count):
+        for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
             if pc in self._bps:
                 raise BreakpointHit()
@@ -314,7 +314,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
     def runToReturn(self, max_instruction_count=1000):
         """ stepo until ret instruction """
         emu = self._emu
-        for _ in xrange(max_instruction_count):
+        for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
             if pc in self._bps:
                 raise BreakpointHit()
@@ -328,7 +328,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
     def runToVa(self, va, max_instruction_count=1000):
         """ stepi until ret instruction """
         emu = self._emu
-        for _ in xrange(max_instruction_count):
+        for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
             if pc in self._bps:
                 raise BreakpointHit()
