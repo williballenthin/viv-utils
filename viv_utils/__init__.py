@@ -99,8 +99,8 @@ def getWorkspace(fp, analyze=True, reanalyze=False, verbose=False, should_save=T
                 vw.analyze()
         else:
             vw.loadFromFile(fp)
+            setVwVivisectLibraryVersion(vw)
             if analyze:
-                setVwVivisectLibraryVersion(vw)
                 vw.analyze()
 
     if should_save:
