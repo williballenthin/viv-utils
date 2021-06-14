@@ -239,7 +239,7 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
 
     if len(names) != 1:
         cache[va] = None
-        logger.warning("conflicting names: 0x%x: %s", va, names)
+        logger.debug("conflicting names: 0x%x: %s", va, names)
         return
 
     # there's one candidate name,
