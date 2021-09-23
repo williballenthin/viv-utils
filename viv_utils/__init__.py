@@ -1,26 +1,29 @@
 import os
-import struct
-import logging
-import inspect
-import hashlib
-import tempfile
-import pkg_resources
 import sys
+import struct
+import hashlib
+import inspect
+import logging
+import tempfile
 
 import envi
 import funcy
 import vivisect
-import vivisect.const
 import intervaltree
+import pkg_resources
+import vivisect.const
 
 from viv_utils.idaloader import loadWorkspaceFromIdb
-
 
 logger = logging.getLogger(__name__)
 
 
+SHELLCODE_BASE = 0x690000
+
+
 class IncompatibleVivVersion(ValueError):
     pass
+
 
 def getVwSampleMd5(vw):
     return vw.filemeta.values()[0]["md5sum"]
@@ -35,6 +38,7 @@ def getVwSampleMd5(vw):
 # if they don't, emit a warning.
 # ideally, we'd bail, but the vivisect distribution situation is already a mess, so let's not further touch that.
 # to minimize unexpected dependencies this check is ignored if a package does not embed the vivisect version
+
 
 def getVivisectLibraryVersion():
     # ref: https://stackoverflow.com/questions/710609/checking-a-python-module-version-at-runtime
@@ -131,7 +135,7 @@ class LoggingObject(object):
 
     def w(self, *args, **kwargs):
         if self._logger.isEnabledFor(logging.WARN):
-            self._logger.warn(*self._formatFormatString(args), **kwargs)
+            self._logger.warning(*self._formatFormatString(args), **kwargs)
 
     def e(self, *args, **kwargs):
         if self._logger.isEnabledFor(logging.ERROR):
@@ -261,7 +265,22 @@ def getFunctionArgs(vw, fva):
     return vw.getFunctionArgs(fva)
 
 
-def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, analyze=True, should_save=False, save_path=None):
+def getShellcodeWorkspaceFromFile(
+        filepath, arch, base=SHELLCODE_BASE, entry_point=0, analyze=True, should_save=False
+):
+    with open(filepath, "rb") as f:
+        sample_bytes = f.read()
+
+    vw = getShellcodeWorkspace(
+        sample_bytes, arch, base=base, entry_point=entry_point, analyze=analyze, should_save=should_save
+    )
+
+    vw.setMeta("StorageName", "%s.viv" % filepath)
+
+    return vw
+
+
+def getShellcodeWorkspace(buf, arch, base=SHELLCODE_BASE, entry_point=0, analyze=True, should_save=False, save_path=None):
     """
     Load shellcode into memory object and generate vivisect workspace.
     Thanks to Tom for most of the code.
@@ -269,6 +288,7 @@ def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, analyze=True,
     :param arch: architecture string
     :param base: base address where shellcode will be loaded
     :param entry_point: entry point of shellcode, relative to base
+    :param analyze: analyze workspace or otherwise leave it to caller
     :param should_save: save workspace to disk
     :param save_path: path to save workspace to
     :return: vivisect workspace
@@ -286,7 +306,7 @@ def getShellcodeWorkspace(buf, arch="i386", base=0, entry_point=0, analyze=True,
     vw._snapInAnalysisModules()
 
     vw.addMemoryMap(base, envi.memory.MM_RWX, 'shellcode', buf)
-    vw.addSegment(base, len(buf), 'shellcode_0x%x' % base, 'blob')
+    vw.addSegment(base, len(buf), 'shellcode_0x%x' % base, 'shellcode')
 
     vw.addEntryPoint(base + entry_point)  # defaults to start of shellcode
 

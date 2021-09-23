@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import sys
+
 import setuptools
 
 requirements = [
-    "funcy",
-    "argparse",
-    "pefile",
-    "vivisect",
-    "intervaltree",
+    "funcy==1.16",
+    "pefile==2021.9.3",
+    "vivisect==1.0.5",
+    "intervaltree==3.1.0",
 ]
 
 extras_requirements = {}
@@ -19,7 +19,7 @@ if sys.version_info >= (3, 0):
 
 setuptools.setup(
     name='viv_utils',
-    version='0.6.5',
+    version='0.6.6',
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",
@@ -40,12 +40,12 @@ setuptools.setup(
     extras_require=extras_requirements,
     keywords='viv_utils',
     classifiers=[
-        'Development Status :: 2 - Pre-Alpha',
+        'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Developers',
         'Natural Language :: English',
         "Programming Language :: Python :: 2",
         'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
     ],
 )
-
