@@ -1,9 +1,15 @@
+import os
+import gzip
+import time
 import logging
+import contextlib
 
 import envi
+import flirt
 import vivisect
-import vivisect.const
 import vivisect.exc
+import vivisect.const
+
 import viv_utils
 
 logger = logging.getLogger(__name__)
@@ -12,6 +18,14 @@ logger = logging.getLogger(__name__)
 # vivisect funcmeta key for a bool to indicate if a function is recognized from a library.
 # not expecting anyone to use this, aka private symbol.
 _LIBRARY_META_KEY = "is-library"
+
+
+@contextlib.contextmanager
+def timing(msg):
+    t0 = time.time()
+    yield
+    t1 = time.time()
+    logger.debug("perf: %s: %0.2fs", msg, t1 - t0)
 
 
 def is_library_function(vw, va):
@@ -321,3 +335,48 @@ def addFlirtFunctionAnalyzer(vw, analyzer):
 
     vw.fmodlist.append(key)
     vw.fmods[key] = analyzer
+
+
+def register_flirt_signature_analyzers(vw, sigpaths):
+    """
+    args:
+      vw (vivisect.VivWorkspace):
+      sigpaths (List[str]): file system paths of .sig/.pat files
+    """
+    for sigpath in sigpaths:
+        try:
+            sigs = load_flirt_signature(sigpath)
+        except ValueError as e:
+            logger.warning("could not load %s: %s", sigpath, str(e))
+            continue
+
+        logger.debug("flirt: sig count: %d", len(sigs))
+
+        with timing("flirt: compiling sigs"):
+            matcher = flirt.compile(sigs)
+
+        analyzer = viv_utils.flirt.FlirtFunctionAnalyzer(matcher, sigpath)
+        logger.debug("registering viv function analyzer: %s", repr(analyzer))
+        viv_utils.flirt.addFlirtFunctionAnalyzer(vw, analyzer)
+
+
+def load_flirt_signature(path):
+    if path.endswith(".sig"):
+        with open(path, "rb") as f:
+            with timing("flirt: parsing .sig: " + path):
+                sigs = flirt.parse_sig(f.read())
+
+    elif path.endswith(".pat"):
+        with open(path, "rb") as f:
+            with timing("flirt: parsing .pat: " + path):
+                sigs = flirt.parse_pat(f.read().decode("utf-8").replace("\r\n", "\n"))
+
+    elif path.endswith(".pat.gz"):
+        with gzip.open(path, "rb") as f:
+            with timing("flirt: parsing .pat.gz: " + path):
+                sigs = flirt.parse_pat(f.read().decode("utf-8").replace("\r\n", "\n"))
+
+    else:
+        raise ValueError("unexpect signature file extension: " + path)
+
+    return sigs
