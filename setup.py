@@ -19,7 +19,7 @@ if sys.version_info >= (3, 0):
 
 setuptools.setup(
     name='viv_utils',
-    version='0.6.6',
+    version='0.6.7',
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",

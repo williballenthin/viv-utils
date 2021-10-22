@@ -164,6 +164,21 @@ class Function(LoggingObject):
         bb = map(lambda b: BasicBlock(self.vw, *b), self.vw.getFunctionBlocks(self.va))
         return sorted(bb, key=lambda b: b.va)
 
+    def get_bb_by_va(self, va):
+        for bb in self.basic_blocks:
+            if va == bb.va:
+                return bb
+        raise ValueError("no basic block found starting at 0x%x" % va)
+
+    def get_bb_succs(self, bb):
+        for bva, bflags in bb.succs:
+            if bva:
+                try:
+                    yield self.get_bb_by_va(bva)
+                except ValueError:
+                    # shouldn't happen, but does
+                    pass
+
     @funcy.cached_property
     def id(self):
         return self.vw.filemeta.values()[0]["md5sum"] + ":" + hex(self.va)
@@ -214,6 +229,14 @@ class BasicBlock(LoggingObject):
             ret.append(o)
             va += len(o)
         return ret
+
+    @funcy.cached_property
+    def succs(self):
+        # getBranches returns list of tuples (bva, bflags)
+        branches = self.instructions[-1].getBranches()
+        # ignore call branches
+        branches = list(filter(lambda b: not (b[1] & (envi.BR_PROC | envi.BR_DEREF)), branches))
+        return branches
 
     def __repr__(self):
         return "BasicBlock(va: {:s}, size: {:s}, fva: {:s})".format(
