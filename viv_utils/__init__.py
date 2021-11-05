@@ -173,7 +173,7 @@ class Function(LoggingObject):
         raise ValueError("no basic block found starting at 0x%x" % va)
 
     def get_bb_succs(self, bb):
-        for bva, bflags in bb.succs:
+        for bva, _ in bb.succs:
             if bva:
                 try:
                     yield self.get_bb_by_va(bva)
@@ -428,11 +428,11 @@ def getWorkspaceFromFile(filepath, analyze=True):
 def get_prev_opcode(vw, va):
     prev_item = vw.getPrevLocation(va)
     if prev_item is None:
-        raise RuntimeError('failed to find prev instruction for va: %x', va)
+        raise RuntimeError('failed to find prev instruction for va: %x' % va)
 
     lva, lsize, ltype, linfo = prev_item
     if ltype != vivisect.const.LOC_OP:
-        raise RuntimeError('failed to find prev instruction for va: %x', va)
+        raise RuntimeError('failed to find prev instruction for va: %x' % va)
 
     try:
         op = vw.parseOpcode(lva)
