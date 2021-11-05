@@ -5,6 +5,7 @@ import hashlib
 import inspect
 import logging
 import tempfile
+import functools
 
 import envi
 import funcy
@@ -164,6 +165,7 @@ class Function(LoggingObject):
         bb = map(lambda b: BasicBlock(self.vw, *b), self.vw.getFunctionBlocks(self.va))
         return sorted(bb, key=lambda b: b.va)
 
+    @functools.lru_cache
     def get_bb_by_va(self, va):
         for bb in self.basic_blocks:
             if va == bb.va:
@@ -522,8 +524,6 @@ class CFG(object):
                 yield pred
                 predecessors.append(pred)
             except KeyError:
-                # if we have a jump to the import table,
-                # the target of the jump is not a basic block in the function.
                 continue
 
         self._pred_cache[bb.va] = predecessors
