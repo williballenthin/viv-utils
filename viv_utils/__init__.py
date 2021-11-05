@@ -234,8 +234,13 @@ class BasicBlock(LoggingObject):
 
     @funcy.cached_property
     def succs(self):
+        insns = self.instructions
+        if not insns:
+            return ()
+
         # getBranches returns list of tuples (bva, bflags)
-        branches = self.instructions[-1].getBranches()
+        branches = insns[-1].getBranches()
+
         # ignore call branches
         branches = list(filter(lambda b: not (b[1] & (envi.BR_PROC | envi.BR_DEREF)), branches))
         return branches
@@ -426,7 +431,7 @@ def getWorkspaceFromFile(filepath, analyze=True):
 
 
 def get_prev_opcode(vw, va):
-    prev_item = vw.getPrevLocation(va)
+    prev_item = vw.getLocation(va - 1)
     if prev_item is None:
         raise RuntimeError('failed to find prev instruction for va: %x' % va)
 
@@ -485,8 +490,19 @@ class CFG(object):
         self.vw = func.vw
         self.func = func
         self.bb_by_start = {bb.va: bb for bb in self.func.basic_blocks}
-        self.bb_by_end = {get_prev_opcode(self.vw, bb.va + bb.size).va: bb
-                          for bb in self.func.basic_blocks}
+
+        self.bb_by_end = {}
+        for bb in self.func.basic_blocks:
+            try:
+                last_insn = get_prev_opcode(self.vw, bb.va + bb.size)
+                self.bb_by_end[last_insn] = bb
+            except RuntimeError:
+                # viv detects "function blocks" that we interpret as "basic blocks".
+                # viv may have incorrect analysis, such that a block may not be made up of contiguous instructions.
+                # if we can't find an instruction at the end of a basic block,
+                # we're dealing with junk. don't index that BB.
+                continue
+
         self._succ_cache = {}
         self._pred_cache = {}
 
@@ -496,9 +512,16 @@ class CFG(object):
                 yield nbb
             return
 
-        successors = []
         next_va = bb.va + bb.size
-        op = get_prev_opcode(self.vw, next_va)
+        try:
+            op = get_prev_opcode(self.vw, next_va)
+        except RuntimeError:
+            # like above, if there's not an insn at the end of the BB,
+            # we're dealing with junk, and there's not much point.
+            self._succ_cache[bb.va] = []
+            return
+
+        successors = []
         for xref in get_all_xrefs_from(self.vw, op.va):
             try:
                 succ = self.bb_by_start[xref[vivisect.const.XR_TO]]
