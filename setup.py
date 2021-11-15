@@ -14,12 +14,12 @@ requirements = [
 extras_requirements = {}
 if sys.version_info >= (3, 0):
     extras_requirements["flirt"] = [
-        "python-flirt==0.6.3",
+        "python-flirt==0.7.0",
     ]
 
 setuptools.setup(
     name='viv_utils',
-    version='0.6.8',
+    version='0.6.9',
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",
