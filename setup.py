@@ -7,7 +7,7 @@ import setuptools
 requirements = [
     "funcy==1.16",
     "pefile==2021.9.3",
-    "vivisect==1.0.5",
+    "vivisect==1.0.6",
     "intervaltree==3.1.0",
 ]
 
@@ -19,7 +19,7 @@ if sys.version_info >= (3, 0):
 
 setuptools.setup(
     name='viv_utils',
-    version='0.6.9',
+    version='0.6.10',
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",
