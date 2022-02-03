@@ -19,6 +19,8 @@ try:
     import idc
     import idaapi
     import idautils
+    import ida_ida
+    import ida_nalt
 except ImportError:
     logger.debug('failed to import IDA Pro modules')
 
@@ -77,14 +79,14 @@ def get_data(start, size):
       bytes: `size` bytes, filled with NULL when byte not available from database.
     '''
     # best case, works pretty often.
-    buf = idc.GetManyBytes(start, size)
+    buf = idc.get_bytes(start, size)
     if buf:
         return buf
 
     # but may fail, when there's no byte defined.
     buf = []
     for ea in range(start, start+size):
-        b = idc.GetManyBytes(ea, 1)
+        b = idc.get_bytes(ea, 1)
         if b:
             buf.append(b)
         else:
@@ -108,7 +110,7 @@ def get_segment_data(segstart):
     '''
     bufs = []
 
-    segend = idc.SegEnd(segstart)
+    segend = idc.get_segm_end(segstart)
     segsize = segend - segstart
     pagecount = segsize // PAGE_SIZE
     remainder = segsize - (pagecount * PAGE_SIZE)
@@ -186,7 +188,7 @@ def get_import_thunk(import_addr):
         if xref.type != 3:  # XrefTypeName(3) == 'Data_Read'
             continue
 
-        if idc.GetMnem(xref.frm) != 'jmp':
+        if idc.print_insn_mnem(xref.frm) != 'jmp':
             continue
 
         return xref.frm
@@ -202,8 +204,8 @@ def get_functions():
     Yields:
       int: address of the function.
     '''
-    startea = idc.BeginEA()
-    for fva in idautils.Functions(idc.SegStart(startea), idc.SegEnd(startea)):
+    startea = ida_ida.inf_get_min_ea()
+    for fva in idautils.Functions(idc.get_segm_start(startea), idc.get_segm_end(startea)):
         yield fva
 
 
@@ -232,10 +234,10 @@ def loadWorkspaceFromIdb():
     vw.setMeta('Format', 'pe')
     vw._snapInAnalysisModules()
 
-    filename = idc.GetInputFile()
+    filename = ida_nalt.get_root_filename()
 
     for segstart in idautils.Segments():
-        segname = idc.SegName(segstart)
+        segname = idc.get_segm_name(segstart)
         segbuf = get_segment_data(segstart)
 
         if segbuf is None:
@@ -258,9 +260,9 @@ def loadWorkspaceFromIdb():
     vw.analyze()
 
     for fva in get_functions():
-        logger.debug('marking function %s at %x', idc.GetFunctionName(fva), fva)
+        logger.debug('marking function %s at %x', idc.get_func_name(fva), fva)
         vw.makeFunction(fva)
-        vw.makeName(fva, idc.GetFunctionName(fva))
+        vw.makeName(fva, idc.get_func_name(fva))
 
     # can only set thunk-ness after a function is defined.
     for ea, dllname, name, ordinal in get_imports():
