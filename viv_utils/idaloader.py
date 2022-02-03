@@ -21,6 +21,7 @@ try:
     import idautils
     import ida_ida
     import ida_nalt
+    import idautils
 except ImportError:
     logger.debug('failed to import IDA Pro modules')
 
@@ -234,7 +235,7 @@ def loadWorkspaceFromIdb():
     vw.setMeta('Format', 'pe')
     vw._snapInAnalysisModules()
 
-    filename = ida_nalt.get_root_filename()
+    filename = vw.addFile(ida_nalt.get_root_filename(), idaapi.get_imagebase(), idautils.GetInputFileMD5())
 
     for segstart in idautils.Segments():
         segname = idc.get_segm_name(segstart)
@@ -244,7 +245,7 @@ def loadWorkspaceFromIdb():
             raise RuntimeError('failed to read segment data')
 
         logger.debug('mapping section %s with %x bytes', segname, len(segbuf))
-        vw.addMemoryMap(segstart, envi.memory.MM_RWX, segname, segbuf)
+        vw.addMemoryMap(segstart, idautils.ida_segment.get_segm_by_name(segname).perm, filename, segbuf)
         vw.addSegment(segstart, len(segbuf), segname, filename)
 
     for ea, ordinal, name in get_exports():
