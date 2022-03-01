@@ -189,6 +189,8 @@ class EmulatorDriver(object):
                 if ret is not None:
                     self._logger.debug("driver hook handled call: %s", callname)
                     return True
+                if callname:
+                    self._logger.debug("driver hook API call NOT handled: %s", callname)
             except UnsupportedFunction:
                 continue
             except Exception as e:

@@ -87,7 +87,7 @@ def main():
     seen = set()
 
     for function in vw.getFunctions():
-        buf = vw.readMemory(function, 0x10000)
+        buf = viv_utils.readMemoryCurrentSection(vw, function, 0x10000)
 
         for match in matcher.match(buf):
             references = list(filter(lambda n: n[1] == "reference" and (function + n[2]) not in seen, match.names))
@@ -112,7 +112,7 @@ def main():
                 print("    delta: 0x%x" % (ref_va - loc_va))
 
                 size = loc[vivisect.const.L_SIZE]
-                buf = vw.readMemory(loc_va, size)
+                buf = viv_utils.readMemoryCurrentSection(vw, loc_va, size)
                 print("    bytes: %s" % (binascii.hexlify(buf).decode("ascii")))
 
                 print("           %s^" % ("  " * (ref_va - loc_va)))

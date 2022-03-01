@@ -154,9 +154,7 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
     # perf: larger the size, more to memcpy.
     size = max(0x10000, function_meta.get("Size", 0))
 
-    # viv returns truncated data at the end of sections,
-    # no need for any special logic here.
-    buf = vw.readMemory(va, size)
+    buf = viv_utils.readMemoryCurrentSection(vw, va, size)
 
     matches = []
     for match in matcher.match(buf):
