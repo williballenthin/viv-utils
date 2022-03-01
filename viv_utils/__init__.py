@@ -692,3 +692,15 @@ class Debugger(object):
     def push(self, v):
         self.esp = self.esp - 4
         self.write_dword(self.esp, v)
+
+
+def readMemoryCurrentSection(vw, va, size):
+    """
+    only read memory up to current section end
+    """
+    mva, msize, mperms, mfname = vw.getMemoryMap(va)
+    offset = va - mva
+    maxreadlen = msize - offset
+    if size > maxreadlen:
+        size = maxreadlen
+    return vw.readMemory(va, size)
