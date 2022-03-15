@@ -114,35 +114,6 @@ def getWorkspace(fp, analyze=True, reanalyze=False, verbose=False, should_save=T
     return vw
 
 
-class LoggingObject(object):
-    def __init__(self):
-        self._logger = logging.getLogger("{:s}.{:s}".format(
-            self.__module__, self.__class__.__name__))
-
-    def _getCallerFunction(self):
-        FUNCTION_NAME_INDEX = 3
-        return inspect.stack()[3][FUNCTION_NAME_INDEX]
-
-    def _formatFormatString(self, args):
-        return [self._getCallerFunction() + ": " + args[0]] + [a for a in args[1:]]
-
-    def d(self, *args, **kwargs):
-        if self._logger.isEnabledFor(logging.DEBUG):
-            self._logger.debug(*self._formatFormatString(args), **kwargs)
-
-    def i(self, *args, **kwargs):
-        if self._logger.isEnabledFor(logging.INFO):
-            self._logger.info(*self._formatFormatString(args), **kwargs)
-
-    def w(self, *args, **kwargs):
-        if self._logger.isEnabledFor(logging.WARN):
-            self._logger.warning(*self._formatFormatString(args), **kwargs)
-
-    def e(self, *args, **kwargs):
-        if self._logger.isEnabledFor(logging.ERROR):
-            self._logger.error(*self._formatFormatString(args), **kwargs)
-
-
 def set_function_name(vw, va, new_name):
     # vivgui seems to override function_name with symbol names, but this is correct
     ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(va)
@@ -154,7 +125,7 @@ def get_function_name(vw, va):
     return func_name
 
 
-class Function(LoggingObject):
+class Function:
     def __init__(self, vw, va):
         super(Function, self).__init__()
         self.vw = vw
@@ -184,7 +155,7 @@ class Function(LoggingObject):
         return set_function_name(self.vw, self.va, new_name)
 
 
-class BasicBlock(LoggingObject):
+class BasicBlock:
     def __init__(self, vw, va, size, fva):
         super(BasicBlock, self).__init__()
         self.vw = vw
@@ -210,7 +181,7 @@ class BasicBlock(LoggingObject):
             try:
                 o = self.vw.parseOpcode(va)
             except Exception as e:
-                self.d("Failed to disassemble: %s: %s", hex(va), e)
+                logger.debug("failed to disassemble: %s: %s", hex(va), e)
                 break
             ret.append(o)
             va += len(o)
@@ -229,7 +200,7 @@ def one(s):
         return i
 
 
-class InstructionFunctionIndex(LoggingObject):
+class InstructionFunctionIndex:
     """ Index from VA to containing function VA """
     def __init__(self, vw):
         super(InstructionFunctionIndex, self).__init__()

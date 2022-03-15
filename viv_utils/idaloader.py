@@ -9,7 +9,6 @@ website: https://gist.github.com/williballenthin/f88c5c95f3e41157de3806dfbeef4bd
 import logging
 import functools
 
-import envi
 import vivisect
 import vivisect.const
 

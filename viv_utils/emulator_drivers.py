@@ -6,7 +6,8 @@ import envi.memory as v_mem
 import visgraph.pathcore as vg_path
 from envi.archs.i386.disasm import PREFIX_REP
 
-from . import LoggingObject
+
+logger = logging.getLogger(__name__)
 
 
 class StopEmulation(Exception):
@@ -31,20 +32,16 @@ class InstructionRangeExceededError(Exception):
         return "InstructionRangeExceededError(ended at instruction 0x%08X)" % self.pc
 
 
-class Hook(LoggingObject):
-    def __init__(self):
-        super(Hook, self).__init__()
-
+class Hook:
     def hook(self, callname, emu, callconv, api, argv):
         # must return something other than None if handled
         # raise UnsupportedFunction to pass
         raise UnsupportedFunction()
 
 
-class Monitor(vivisect.impemu.monitor.EmulationMonitor, LoggingObject):
+class Monitor(vivisect.impemu.monitor.EmulationMonitor):
     def __init__(self, vw):
         vivisect.impemu.monitor.EmulationMonitor.__init__(self)
-        LoggingObject.__init__(self)
         self._vw = vw
         self._logger = logging.getLogger("Monitor")
 
@@ -52,37 +49,28 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor, LoggingObject):
         return emu.readMemoryFormat(emu.getStackCounter() + offset, "<P")[0]
 
     def dumpStack(self, emu, num):
-        self._logger.debug("stack: ESP: %s", hex(emu.getStackCounter()))
+        logger.debug("monitor: stack: ESP: 0x%x", emu.getStackCounter())
         for i in range(num):
-            self.d("stack: ESP + %s: %s",
-                               hex(emu.imem_psize * i),
-                               hex(self.getStackValue(emu, emu.imem_psize * i)))
+            logger.debug("                ESP + 0x%x: 0x%x",
+                         emu.imem_psize * i,
+                         self.getStackValue(emu, emu.imem_psize * i))
 
     def prehook(self, emu, op, startpc):
         pass
-        #self._logger.debug("======================")
-        #self._logger.debug("prehook: %s: %s", hex(startpc), op)
-        #self._logger.debug("eflags: %s", bin(emu.getRegisterByName("eflags")))
-        #self._logger.debug("PF: %s", emu.getFlag(EFLAGS_PF))
-        #self.dumpStack(emu, 4)
-        #self._logger.debug("----------------------")
 
     def posthook(self, emu, op, endpc):
-        #self.dumpStack(emu, 4)
-        #self._logger.debug("  EBX: %s", hex(emu.getRegisterByName("ebx")))
         pass
 
     def apicall(self, driver, op, pc, api, argv):
-        #self._logger.debug("apicall: %s %s %s %s", op, pc, api, argv)
         # if non-None is returned, then it signals that the API call was handled
         #   and this function *must* handle cleaning up the stack
         pass
 
     def logAnomaly(self, emu, pc, e):
-        self.w("anomaly: %s", e)
+        logger.warning("monitor: anomaly: %s", e)
 
 
-class EmulatorDriver(object):
+class EmulatorDriver:
     """
     this is a type of object that knows how to drive an emulator in various ways.
     """
@@ -91,7 +79,6 @@ class EmulatorDriver(object):
         self._emu = emu
         self._monitors = set([])
         self._hooks = set([])
-        self._logger = logging.getLogger("EmulatorDriver")
 
     def add_monitor(self, mon):
         self._monitors.add(mon)
@@ -118,8 +105,6 @@ class EmulatorDriver(object):
         emu = self._emu
         api = emu.getCallApi(pc)
         rtype, rname, convname, callname, funcargs = api
-        callconv = emu.getCallingConvention(convname)
-        argv = callconv.getCallArgs(emu, len(funcargs))
 
         return callname in emu.hooks
 
@@ -157,7 +142,7 @@ class EmulatorDriver(object):
         if convname:
             callconv = emu.getCallingConvention(convname)
         else:
-            self._logger.debug("No call convention available at 0x%x. Using stdcall as default.", pc)
+            logger.debug("driver: no call convention available at 0x%x. Using stdcall as default.", pc)
             callconv = emu.getCallingConvention("stdcall")
         argv = []
         if callconv:
@@ -175,7 +160,7 @@ class EmulatorDriver(object):
                 if r is not None:
                     # take the first result
                     # not ideal, but works in the common case
-                    self._logger.debug("monitor hook handled call: %s", callname)
+                    logger.debug("driver: monitor hook handled call: %s", callname)
                     return True
             except Exception as e:
                 mon.logAnomaly(emu, pc,
@@ -187,10 +172,10 @@ class EmulatorDriver(object):
                 # take the first result
                 # not ideal, but works in the common case
                 if ret is not None:
-                    self._logger.debug("driver hook handled call: %s", callname)
+                    logger.debug("driver: hook handled call: %s", callname)
                     return True
                 if callname:
-                    self._logger.debug("driver hook API call NOT handled: %s", callname)
+                    logger.debug("driver: hook API call NOT handled: %s", callname)
             except UnsupportedFunction:
                 continue
             except Exception as e:
@@ -201,7 +186,7 @@ class EmulatorDriver(object):
             hook = emu.hooks.get(callname)
             try:
                 hook(self, callconv, api, argv)
-                self._logger.debug("emu hook handled call: %s", callname)
+                logger.debug("driver: emu hook handled call: %s", callname)
                 return True
             except Exception as e:
                 mon.logAnomaly(emu, pc,
@@ -239,7 +224,7 @@ class EmulatorDriver(object):
         if convname:
             callconv = emu.getCallingConvention(convname)
         else:
-            self._logger.debug("No call convention available at 0x%x. Using stdcall as default.", endpc)
+            logger.debug("driver: no call convention available at 0x%x. Using stdcall as default.", endpc)
             callconv = emu.getCallingConvention("stdcall")
 
         if self.doHook(endpc, op):
@@ -480,11 +465,11 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                     if strictops:
                         break
                     else:
-                        self._logger.debug('runFunction continuing after unsupported instruction: 0x%08x %s',
+                        logger.debug('driver: runFunction continuing after unsupported instruction: 0x%08x %s',
                                e.op.va, e.op.mnem)
                         emu.setProgramCounter(e.op.va + e.op.size)
                 except Exception as e:
-                    self._logger.warning("error during emulation of function: %s", e)#, exc_info=True)
+                    logger.warning("driver: error during emulation of function: %s", e)
                     for mon in self._monitors:
                         mon.logAnomaly(emu, startpc, str(e))
                     break # If we exc during execution, this branch is dead.
