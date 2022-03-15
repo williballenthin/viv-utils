@@ -11,12 +11,6 @@ requirements = [
     "intervaltree==3.1.0",
 ]
 
-extras_requirements = {}
-if sys.version_info >= (3, 0):
-    extras_requirements["flirt"] = [
-        "python-flirt==0.7.0",
-    ]
-
 setuptools.setup(
     name='viv_utils',
     version='0.6.11',
@@ -36,16 +30,26 @@ setuptools.setup(
     },
     include_package_data=True,
     install_requires=requirements,
+    extras_require={
+        "flirt": [
+            "python-flirt==0.7.0",
+        ],
+        "dev": [
+            "pytest==7.0.1",
+            "pytest-sugar==0.9.4",
+            "pytest-instafail==0.4.2",
+            "pycodestyle==2.8.0",
+            "black==22.1.0",
+            "isort==5.10.1",
+            "mypy==0.940",
+        ],
+    },
     zip_safe=False,
-    extras_require=extras_requirements,
     keywords='viv_utils',
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Developers',
         'Natural Language :: English',
-        "Programming Language :: Python :: 2",
-        'Programming Language :: Python :: 2.6',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
     ],
 )
