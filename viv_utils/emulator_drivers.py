@@ -339,11 +339,19 @@ class DebuggerEmulatorDriver(EmulatorDriver):
                 self.stepo()
         raise InstructionRangeExceededError(pc)
 
-    def runToVa(self, va, max_instruction_count=1000):
+    def runToVa(self, va, maxhit=None, max_instruction_count=1000) -> None:
         """ stepi until ret instruction """
         emu = self._emu
+        hits = dict()
         for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
+            if maxhit != None:
+                h = hits.get(pc, 0)
+                h += 1
+                if h > maxhit:
+                    # instead of returning skip over (loops) to emulate more code
+                    self.skip(pc)
+                hits[pc] = h
             if pc in self._bps:
                 raise BreakpointHit()
             if pc == va:
@@ -351,6 +359,10 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             else:
                 self.stepi()
         raise InstructionRangeExceededError(pc)
+
+    def skip(self, pc):
+        op = self._emu.parseOpcode(pc)
+        self._emu.setProgramCounter(pc + len(op))
 
     def addBreakpoint(self, va):
         self._bps.add(va)
