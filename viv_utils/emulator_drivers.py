@@ -95,7 +95,7 @@ class EmulatorDriver:
     def isCall(self, op):
         return bool(op.iflags & v_envi.IF_CALL)
 
-    def isJmpCall(self, op):
+    def isIndirectMemJump(self, op):
         # jmp/call via thunk on x86
         # jmp/call via import on x64
         return op.mnem == "jmp" and isinstance(
@@ -218,24 +218,24 @@ class EmulatorDriver:
 
         return True if stepped into the function, False if the function is completely handled
         """
-        if not (self.isCall(op) or self.isJmpCall(op)):
+        if not (self.isCall(op) or self.isIndirectMemJump(op)):
             raise RuntimeError("not a call or jmp call")
 
         emu = self._emu
         is_call = self.isCall(op)
 
         emu.executeOpcode(op)
-        endpc = emu.getProgramCounter()
+        target = emu.getProgramCounter()
 
-        api = emu.getCallApi(endpc)
+        api = emu.getCallApi(target)
         rtype, rname, convname, callname, funcargs = api
         if convname:
             callconv = emu.getCallingConvention(convname)
         else:
-            logger.debug("driver: no call convention available at 0x%x. Using stdcall as default.", endpc)
+            logger.debug("driver: no call convention available at 0x%x. Using stdcall as default.", target)
             callconv = emu.getCallingConvention("stdcall")
 
-        if self.doHook(endpc, op):
+        if self.doHook(target, op):
             if is_call:
                 # some hook handled the call,
                 # so make sure PC is at the next instruction
@@ -243,7 +243,7 @@ class EmulatorDriver:
             # otherwise next PC is on stack
             return False
 
-        elif avoid_calls or emu.getVivTaint(endpc):
+        elif avoid_calls or emu.getVivTaint(target):
             # jump over the call instruction
             # return value --> 0
             callconv.execCallReturn(emu, 0, len(funcargs))
@@ -252,7 +252,7 @@ class EmulatorDriver:
             return False
 
         elif not avoid_calls:
-            if emu.probeMemory(endpc, 0x1, v_mem.MM_EXEC):
+            if emu.probeMemory(target, 0x1, v_mem.MM_EXEC):
                 # this is executable memory, so we're good
                 # op already emulated, just return
                 return True
@@ -280,7 +280,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         for mon in self._monitors:
             mon.prehook(emu, op, startpc)
 
-        if self.isCall(op) or self.isJmpCall(op):
+        if self.isCall(op) or self.isIndirectMemJump(op):
             self.handleCall(startpc, op, avoid_calls=avoid_calls)
         else:
             emu.executeOpcode(op)
