@@ -26,8 +26,16 @@ class IncompatibleVivVersion(ValueError):
     pass
 
 
+def getVwFirstMeta(vw):
+    # return the first set of metadata from the vw.
+    # this is for the first loaded file.
+    # if other files have been added to the vw,
+    # then this may not do what you want.
+    return list(vw.filemeta.values())[0]
+
+
 def getVwSampleMd5(vw):
-    return vw.filemeta.values()[0]["md5sum"]
+    return getVwFirstMeta(vw)["md5sum"]
 
 
 # while building and testing capa,
@@ -77,7 +85,7 @@ def loadWorkspaceFromViv(vw, viv_file):
         vw.loadWorkspace(viv_file)
 
 
-def getWorkspace(fp, analyze=True, reanalyze=False, verbose=False, should_save=True):
+def getWorkspace(fp: str, analyze=True, reanalyze=False, verbose=False, should_save=True):
     '''
     For a file path return a workspace, it will create one if the extension
     is not .viv, otherwise it will load the existing one. Reanalyze will cause
