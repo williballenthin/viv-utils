@@ -2,10 +2,9 @@ import os
 import sys
 import struct
 import hashlib
-import inspect
 import logging
 import tempfile
-import functools
+from typing import List
 
 import envi
 import funcy
@@ -122,31 +121,31 @@ def getWorkspace(fp: str, analyze=True, reanalyze=False, verbose=False, should_s
     return vw
 
 
-def set_function_name(vw, va, new_name):
+def set_function_name(vw, va: int, new_name: str):
     # vivgui seems to override function_name with symbol names, but this is correct
     ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(va)
     vw.setFunctionApi(va, (ret_type, ret_name, call_conv, new_name, args))
 
 
-def get_function_name(vw, va):
+def get_function_name(vw, va: int) -> str:
     ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(va)
     return func_name
 
 
 class Function:
-    def __init__(self, vw, va):
+    def __init__(self, vw, va: int):
         super(Function, self).__init__()
         self.vw = vw
         self.va = va
 
     @funcy.cached_property
-    def basic_blocks(self):
+    def basic_blocks(self) -> List["BasicBlock"]:
         bb = map(lambda b: BasicBlock(self.vw, *b), self.vw.getFunctionBlocks(self.va))
-        return sorted(bb, key=lambda b: b.va)
+        return list(sorted(bb, key=lambda b: b.va))
 
     @funcy.cached_property
     def id(self):
-        return self.vw.filemeta.values()[0]["md5sum"] + ":" + hex(self.va)
+        return getVwFirstMeta(self.vw)["md5sum"] + ":" + hex(self.va)
 
     def __repr__(self):
         return "Function(va: {:s})".format(hex(self.va))
@@ -164,7 +163,7 @@ class Function:
 
 
 class BasicBlock:
-    def __init__(self, vw, va, size, fva):
+    def __init__(self, vw, va: int, size: int, fva: int):
         super(BasicBlock, self).__init__()
         self.vw = vw
         self.va = va
@@ -172,7 +171,7 @@ class BasicBlock:
         self.fva = fva
 
     @funcy.cached_property
-    def instructions(self):
+    def instructions(self) -> List[envi.Opcode]:
         """
         from envi/__init__.py:class Opcode
         391         opcode   - An architecture specific numerical value for the opcode
@@ -201,6 +200,9 @@ class BasicBlock:
 
     def __int__(self):
         return self.va
+
+    def __len__(self):
+        return self.size
 
 
 def one(s):
