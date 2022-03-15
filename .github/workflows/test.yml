@@ -23,7 +23,7 @@ jobs:
     - name: Lint with black
       run: black -l 120 --check .
     - name: Check types with mypy
-      run: mypy --config-file .github/mypy/mypy.ini viv-utils/ tests/
+      run: mypy --config-file .github/mypy/mypy.ini viv_utils/ tests/
 
   tests:
     name: Tests in ${{ matrix.python-version }} on ${{ matrix.os }}
