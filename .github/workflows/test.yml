@@ -28,7 +28,7 @@ jobs:
   tests:
     name: Tests in ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    needs: [code_style, rule_linter]
+    needs: [code_style]
     strategy:
       fail-fast: false
       matrix:
