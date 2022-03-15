@@ -382,12 +382,24 @@ def getWorkspaceFromFile(filepath, analyze=True):
     return vw
 
 
-def get_prev_opcode(vw, va):
-    prev_item = vw.getLocation(va - 1)
-    if prev_item is None:
-        raise RuntimeError('failed to find prev instruction for va: %x' % va)
+def get_prev_loc(vw, va):
+    this_item = vw.getLocation(va)
+    if this_item is None:
+        # no location at the given address,
+        # probe for a location directly before this one.
+        prev_item = vw.getLocation(va - 1)
+    else:
+        this_va, _, _, _ = this_item
+        prev_item = vw.getLocation(this_va - 1)
 
-    lva, lsize, ltype, linfo = prev_item
+    if prev_item is None:
+        raise RuntimeError('failed to find prev location for va: %x' % va)
+
+    return prev_item
+
+
+def get_prev_opcode(vw, va):
+    lva, lsize, ltype, linfo = get_prev_loc(vw, va)
     if ltype != vivisect.const.LOC_OP:
         raise RuntimeError('failed to find prev instruction for va: %x' % va)
 
@@ -446,9 +458,11 @@ class CFG(object):
         self.bb_by_end = {}
         for bb in self.func.basic_blocks:
             try:
-                last_insn = get_prev_opcode(self.vw, bb.va + bb.size)
-                self.bb_by_end[last_insn] = bb
-            except RuntimeError:
+                lva, _, ltype, _ = get_prev_loc(self.vw, bb.va + bb.size)
+                if ltype != vivisect.const.LOC_OP:
+                    raise RuntimeError('failed to find prev instruction for va: %x' % (bb.va + bb.size))
+                self.bb_by_end[lva] = bb
+            except RuntimeError as e:
                 # viv detects "function blocks" that we interpret as "basic blocks".
                 # viv may have incorrect analysis, such that a block may not be made up of contiguous instructions.
                 # if we can't find an instruction at the end of a basic block,
