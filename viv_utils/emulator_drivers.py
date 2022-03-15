@@ -108,6 +108,13 @@ class EmulatorDriver(object):
     def isCall(self, op):
         return bool(op.iflags & v_envi.IF_CALL)
 
+    def isJmpCall(self, op):
+        # jmp/call via thunk on x86
+        # jmp/call via import on x64
+        return op.mnem == "jmp" and isinstance(
+            op.opers[0], (v_envi.archs.i386.disasm.i386ImmMemOper, v_envi.archs.amd64.disasm.Amd64RipRelOper)
+        )
+
     def isRet(self, op):
         return bool(op.iflags & v_envi.IF_RET)
 
@@ -226,10 +233,11 @@ class EmulatorDriver(object):
 
         return True if stepped into the function, False if the function is completely handled
         """
-        if not self.isCall(op):
-            raise RuntimeError("not a call")
+        if not (self.isCall(op) or self.isJmpCall(op)):
+            raise RuntimeError("not a call or jmp call")
 
         emu = self._emu
+        is_call = self.isCall(op)
 
         emu.executeOpcode(op)
         endpc = emu.getProgramCounter()
@@ -243,16 +251,19 @@ class EmulatorDriver(object):
             callconv = emu.getCallingConvention("stdcall")
 
         if self.doHook(endpc, op):
-            # some hook handled the call,
-            # so make sure PC is at the next instruction
-            emu.setProgramCounter(pc + len(op))
+            if is_call:
+                # some hook handled the call,
+                # so make sure PC is at the next instruction
+                emu.setProgramCounter(pc + len(op))
+            # otherwise next PC is on stack
             return False
 
         elif avoid_calls or emu.getVivTaint(endpc):
             # jump over the call instruction
             # return value --> 0
             callconv.execCallReturn(emu, 0, len(funcargs))
-            emu.setProgramCounter(pc + len(op))
+            if is_call:
+                emu.setProgramCounter(pc + len(op))
             return False
 
         elif not avoid_calls:
@@ -263,7 +274,8 @@ class EmulatorDriver(object):
             else:
                 # this is some unknown region of memory, try to return
                 callconv.execCallReturn(emu, 0, len(funcargs))
-                emu.setProgramCounter(pc + len(op))
+                if is_call:
+                    emu.setProgramCounter(pc + len(op))
                 return False
 
 
@@ -283,7 +295,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         for mon in self._monitors:
             mon.prehook(emu, op, startpc)
 
-        if self.isCall(op):
+        if self.isCall(op) or self.isJmpCall(op):
             self.handleCall(startpc, op, avoid_calls=avoid_calls)
         else:
             emu.executeOpcode(op)
