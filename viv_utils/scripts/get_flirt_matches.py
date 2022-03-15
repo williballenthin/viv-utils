@@ -57,12 +57,8 @@ def get_workspace(path, sigpaths):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-d", "--debug", action="store_true", help="enable debugging output on STDERR"
-    )
-    parser.add_argument(
-        "-q", "--quiet", action="store_true", help="disable all output but errors"
-    )
+    parser.add_argument("-d", "--debug", action="store_true", help="enable debugging output on STDERR")
+    parser.add_argument("-q", "--quiet", action="store_true", help="disable all output but errors")
     parser.add_argument(
         "signature",
         type=str,

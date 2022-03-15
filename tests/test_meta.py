@@ -23,24 +23,24 @@ def test_function(pma01):
     assert len(list(f.basic_blocks)) == 19
     assert list(sorted(map(int, f.basic_blocks))) == [
         0x10001010,
-        0x1000102e,
+        0x1000102E,
         0x10001067,
-        0x1000108c,
-        0x100010a3,
-        0x100010dd,
-        0x100010e9,
+        0x1000108C,
+        0x100010A3,
+        0x100010DD,
+        0x100010E9,
         0x10001110,
         0x10001122,
-        0x1000113c,
+        0x1000113C,
         0x10001154,
         0x10001161,
         0x10001179,
-        0x100011b6,
-        0x100011c0,
-        0x100011d0,
-        0x100011db,
-        0x100011e2,
-        0x100011e8
+        0x100011B6,
+        0x100011C0,
+        0x100011D0,
+        0x100011DB,
+        0x100011E2,
+        0x100011E8,
     ]
 
     bb = list(f.basic_blocks)[0]

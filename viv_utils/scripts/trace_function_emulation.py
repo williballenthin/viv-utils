@@ -32,6 +32,7 @@ def _main(bin_path, fva):
 
 def main():
     import sys
+
     sys.exit(_main(*sys.argv[1:]))
 
 

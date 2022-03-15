@@ -12,20 +12,20 @@ requirements = [
 ]
 
 setuptools.setup(
-    name='viv_utils',
-    version='0.6.11',
+    name="viv_utils",
+    version="0.6.11",
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",
-    author_email='william.ballenthin@mandiant.com',
-    url='https://github.com/williballenthin/viv-utils',
+    author_email="william.ballenthin@mandiant.com",
+    url="https://github.com/williballenthin/viv-utils",
     packages=setuptools.find_packages(),
-    package_dir={'viv_utils':'viv_utils'},
-    package_data={'viv_utils': ['data/*.py']},
+    package_dir={"viv_utils": "viv_utils"},
+    package_data={"viv_utils": ["data/*.py"]},
     entry_points={
         "console_scripts": [
             "trace_function_emulation=viv_utils.scripts.trace_function_emulation:main",
-            "get_function_args=viv_utils.scripts.get_function_args:main"
+            "get_function_args=viv_utils.scripts.get_function_args:main",
         ]
     },
     include_package_data=True,
@@ -45,11 +45,17 @@ setuptools.setup(
         ],
     },
     zip_safe=False,
-    keywords='viv_utils',
+    keywords="viv_utils",
     classifiers=[
-        'Development Status :: 5 - Production/Stable',
-        'Intended Audience :: Developers',
-        'Natural Language :: English',
-        'Programming Language :: Python :: 3',
+        "Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Developers",
+        "Natural Language :: English",
+        "Programming Language :: Python :: 3",
     ],
 )
+
+
+# TODO:
+#  - tests
+#  - black
+#  - isort

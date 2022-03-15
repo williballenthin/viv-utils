@@ -39,7 +39,6 @@ def test_cfg(pma01):
 
     assert int(cfg.get_root_basic_block()) == 0x10001010
 
-
     tails = list(cfg.get_leaf_basic_blocks())
     assert len(tails) == 1
 

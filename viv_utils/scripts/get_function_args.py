@@ -8,9 +8,10 @@ g_pp = pprint.PrettyPrinter()
 
 
 class CallArgumentMonitor(viv_utils.emulator_drivers.Monitor):
-    """ collect call arguments to a target function during emulation """
+    """collect call arguments to a target function during emulation"""
+
     def __init__(self, vw, target_fva):
-        """ :param target_fva: address of function whose arguments to monitor """
+        """:param target_fva: address of function whose arguments to monitor"""
         viv_utils.emulator_drivers.Monitor.__init__(self, vw)
         self._fva = target_fva
         self._calls = {}
@@ -21,12 +22,12 @@ class CallArgumentMonitor(viv_utils.emulator_drivers.Monitor):
             self._calls[rv] = argv
 
     def getCalls(self):
-        """ get map of return value of function call to arguments to function call """
+        """get map of return value of function call to arguments to function call"""
         return self._calls.copy()
 
 
 def emulate_function(vw, fva, target_fva):
-    """ run the given function while collecting arguments to a target function """
+    """run the given function while collecting arguments to a target function"""
     emu = vw.getEmulator()
     d = viv_utils.emulator_drivers.FunctionRunnerEmulatorDriver(emu)
 
@@ -63,6 +64,7 @@ def _main(bin_path, ofva):
 
 def main():
     import sys
+
     sys.exit(_main(*sys.argv[1:]))
 
 

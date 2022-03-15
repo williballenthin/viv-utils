@@ -22,7 +22,6 @@ class UnsupportedFunction(Exception):
 
 
 class InstructionRangeExceededError(Exception):
-
     def __init__(self, pc):
         super(InstructionRangeExceededError, self).__init__()
         self.pc = pc
@@ -50,9 +49,9 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor):
     def dumpStack(self, emu, num):
         logger.debug("monitor: stack: ESP: 0x%x", emu.getStackCounter())
         for i in range(num):
-            logger.debug("                ESP + 0x%x: 0x%x",
-                         emu.imem_psize * i,
-                         self.getStackValue(emu, emu.imem_psize * i))
+            logger.debug(
+                "                ESP + 0x%x: 0x%x", emu.imem_psize * i, self.getStackValue(emu, emu.imem_psize * i)
+            )
 
     def prehook(self, emu, op, startpc):
         pass
@@ -73,6 +72,7 @@ class EmulatorDriver:
     """
     this is a type of object that knows how to drive an emulator in various ways.
     """
+
     def __init__(self, emu):
         super(EmulatorDriver, self).__init__()
         self._emu = emu
@@ -115,7 +115,7 @@ class EmulatorDriver:
         return callname in emu.hooks
 
     def readString(self, va, maxlength=0x1000):
-        """ naively read ascii string """
+        """naively read ascii string"""
         return self._emu.readMemory(va, maxlength).partition("\x00")[0]
 
     def getStackValue(self, offset):
@@ -125,7 +125,7 @@ class EmulatorDriver:
         return self._emu.readMemory(self._emu.getStackCounter() + offset, length)
 
     def readStackString(self, offset, maxlength=0x1000):
-        """ naively read ascii string """
+        """naively read ascii string"""
         return self._emu.readMemory(self._emu.getStackCounter() + offset, maxlength).partition("\x00")[0]
 
     def __getattr__(self, name):
@@ -169,8 +169,7 @@ class EmulatorDriver:
                     logger.debug("driver: monitor hook handled call: %s", callname)
                     return True
             except Exception as e:
-                mon.logAnomaly(emu, pc,
-                        "%s.apicall failed: %s" % (mon.__class__.__name__, e))
+                mon.logAnomaly(emu, pc, "%s.apicall failed: %s" % (mon.__class__.__name__, e))
 
         for hook in self._hooks:
             try:
@@ -185,8 +184,7 @@ class EmulatorDriver:
             except UnsupportedFunction:
                 continue
             except Exception as e:
-                mon.logAnomaly(emu, pc,
-                        "%s.apicall failed: %s" % (hook.__class__.__name__, e))
+                mon.logAnomaly(emu, pc, "%s.apicall failed: %s" % (hook.__class__.__name__, e))
 
         if callname in emu.hooks:
             hook = emu.hooks.get(callname)
@@ -195,8 +193,7 @@ class EmulatorDriver:
                 logger.debug("driver: emu hook handled call: %s", callname)
                 return True
             except Exception as e:
-                mon.logAnomaly(emu, pc,
-                        "%s.apicall failed: %s" % (callname, e))
+                mon.logAnomaly(emu, pc, "%s.apicall failed: %s" % (callname, e))
 
         # default case
         return False
@@ -268,6 +265,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
     this is a EmulatorDriver that supports debugger-like operations,
       such as stepi, stepo, call, etc.
     """
+
     def __init__(self, emu):
         super(DebuggerEmulatorDriver, self).__init__(emu)
         self._bps = set([])
@@ -296,7 +294,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         return self.step(False)
 
     def runToCall(self, max_instruction_count=1000):
-        """ stepi until ret instruction """
+        """stepi until ret instruction"""
         emu = self._emu
         for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
@@ -310,7 +308,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         raise InstructionRangeExceededError(pc)
 
     def runToReturn(self, max_instruction_count=1000):
-        """ stepo until ret instruction """
+        """stepo until ret instruction"""
         emu = self._emu
         for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
@@ -324,7 +322,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         raise InstructionRangeExceededError(pc)
 
     def runToVa(self, va, max_instruction_count=1000):
-        """ stepi until ret instruction """
+        """stepi until ret instruction"""
         emu = self._emu
         for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
@@ -354,23 +352,24 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
 
     the .runFunction() implementation is essentially the same as emu.runFunction()
     """
+
     def __init__(self, emu):
         super(FunctionRunnerEmulatorDriver, self).__init__(emu)
         self.path = self.newCodePathNode()
         self.curpath = self.path
 
     def newCodePathNode(self, parent=None, bva=None):
-        '''
+        """
         NOTE: Right now, this is only called from the actual branch state which
         needs it.  it must stay that way for now (register context is being copied
         for symbolic emulator...)
-        '''
+        """
         props = {
-            'bva':bva,    # the entry virtual address for this branch
-            'valist':[],  # the virtual addresses in this node in order
-            'calllog':[], # FIXME is this even used?
-            'readlog':[], # a log of all memory reads from this block
-            'writelog':[],# a log of all memory writes from this block
+            "bva": bva,  # the entry virtual address for this branch
+            "valist": [],  # the virtual addresses in this node in order
+            "calllog": [],  # FIXME is this even used?
+            "readlog": [],  # a log of all memory reads from this block
+            "writelog": [],  # a log of all memory writes from this block
         }
         return vg_path.newPathNode(parent=parent, **props)
 
@@ -379,13 +378,15 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
         :param func_only: is this emulator meant to stay in one function scope?
         :param strictops: should we bail on emulation if unsupported instruction encountered
         """
-        vg_path.setNodeProp(self.curpath, 'bva', funcva)
+        vg_path.setNodeProp(self.curpath, "bva", funcva)
 
         hits = {}
         rephits = {}
-        todo = [(funcva, self.getEmuSnap(), self.path), ]
+        todo = [
+            (funcva, self.getEmuSnap(), self.path),
+        ]
         emu = self._emu
-        vw = self._emu.vw # Save a dereference many many times
+        vw = self._emu.vw  # Save a dereference many many times
         depth = 0
         op = None
 
@@ -396,7 +397,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
 
             # Check if we are beyond our loop max...
             if maxloop != None:
-                lcount = vg_path.getPathLoopCount(self.curpath, 'bva', va)
+                lcount = vg_path.getPathLoopCount(self.curpath, "bva", va)
                 if lcount > maxloop:
                     continue
 
@@ -446,7 +447,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                     else:
                         emu.executeOpcode(op)
 
-                    vg_path.getNodeProp(self.curpath, 'valist').append(startpc)
+                    vg_path.getNodeProp(self.curpath, "valist").append(startpc)
                     endpc = emu.getProgramCounter()
 
                     for mon in self._monitors:
@@ -464,7 +465,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                             break
 
                     if op.iflags & v_envi.IF_RET:
-                        vg_path.setNodeProp(self.curpath, 'cleanret', True)
+                        vg_path.setNodeProp(self.curpath, "cleanret", True)
                         if depth == 0:
                             break
                         else:
@@ -476,14 +477,17 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                     if strictops:
                         break
                     else:
-                        logger.debug('driver: runFunction continuing after unsupported instruction: 0x%08x %s',
-                               e.op.va, e.op.mnem)
+                        logger.debug(
+                            "driver: runFunction continuing after unsupported instruction: 0x%08x %s",
+                            e.op.va,
+                            e.op.mnem,
+                        )
                         emu.setProgramCounter(e.op.va + e.op.size)
                 except Exception as e:
                     logger.warning("driver: error during emulation of function: %s", e)
                     for mon in self._monitors:
                         mon.logAnomaly(emu, startpc, str(e))
-                    break # If we exc during execution, this branch is dead.
+                    break  # If we exc during execution, this branch is dead.
 
     def runFunction(self, funcva, stopva=None, maxhit=None, maxloop=None, maxrep=None, strictops=True, func_only=True):
         try:

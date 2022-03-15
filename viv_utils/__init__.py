@@ -54,7 +54,7 @@ def getVivisectLibraryVersion():
         return pkg_resources.get_distribution("vivisect").version
     except pkg_resources.DistributionNotFound:
         logger.debug("package does not include vivisect distribution")
-    return 'N/A'
+    return "N/A"
 
 
 def setVwVivisectLibraryVersion(vw):
@@ -79,23 +79,26 @@ def loadWorkspaceFromViv(vw, viv_file):
         try:
             vw.loadWorkspace(viv_file)
         except UnicodeDecodeError as e:
-            raise IncompatibleVivVersion("'%s' is an invalid .viv file. It may have been generated with Python 2 (incompatible with Python 3)." % viv_file)
+            raise IncompatibleVivVersion(
+                "'%s' is an invalid .viv file. It may have been generated with Python 2 (incompatible with Python 3)."
+                % viv_file
+            )
     else:
         vw.loadWorkspace(viv_file)
 
 
 def getWorkspace(fp: str, analyze=True, reanalyze=False, verbose=False, should_save=True):
-    '''
+    """
     For a file path return a workspace, it will create one if the extension
     is not .viv, otherwise it will load the existing one. Reanalyze will cause
     it to create and save a new one.
-    '''
+    """
     vw = vivisect.VivWorkspace()
     vw.verbose = verbose
     # this is pretty insane, but simply prop assignment doesn't work.
-    vw.config.getSubConfig('viv').getSubConfig('parsers').getSubConfig('pe')['loadresources'] = True
-    vw.config.getSubConfig('viv').getSubConfig('parsers').getSubConfig('pe')['nx'] = True
-    if fp.endswith('.viv'):
+    vw.config.getSubConfig("viv").getSubConfig("parsers").getSubConfig("pe")["loadresources"] = True
+    vw.config.getSubConfig("viv").getSubConfig("parsers").getSubConfig("pe")["nx"] = True
+    if fp.endswith(".viv"):
         loadWorkspaceFromViv(vw, fp)
         assertVwMatchesVivisectLibrary(vw)
         if reanalyze:
@@ -195,8 +198,7 @@ class BasicBlock:
         return ret
 
     def __repr__(self):
-        return "BasicBlock(va: {:s}, size: {:s}, fva: {:s})".format(
-                hex(self.va), hex(self.size), hex(self.fva))
+        return "BasicBlock(va: {:s}, size: {:s}, fva: {:s})".format(hex(self.va), hex(self.size), hex(self.fva))
 
     def __int__(self):
         return self.va
@@ -211,7 +213,8 @@ def one(s):
 
 
 class InstructionFunctionIndex:
-    """ Index from VA to containing function VA """
+    """Index from VA to containing function VA"""
+
     def __init__(self, vw):
         super(InstructionFunctionIndex, self).__init__()
         self.vw = vw
@@ -224,7 +227,7 @@ class InstructionFunctionIndex:
             for bb in f.basic_blocks:
                 if bb.size == 0:
                     continue
-                self._index[bb.va:bb.va + bb.size] = funcva
+                self._index[bb.va : bb.va + bb.size] = funcva
 
     def __getitem__(self, key):
         v = one(self._index[key])
@@ -247,9 +250,7 @@ def getFunctionArgs(vw, fva):
     return vw.getFunctionArgs(fva)
 
 
-def getShellcodeWorkspaceFromFile(
-        filepath, arch, base=SHELLCODE_BASE, entry_point=0, analyze=True, should_save=False
-):
+def getShellcodeWorkspaceFromFile(filepath, arch, base=SHELLCODE_BASE, entry_point=0, analyze=True, should_save=False):
     with open(filepath, "rb") as f:
         sample_bytes = f.read()
 
@@ -262,7 +263,9 @@ def getShellcodeWorkspaceFromFile(
     return vw
 
 
-def getShellcodeWorkspace(buf, arch, base=SHELLCODE_BASE, entry_point=0, analyze=True, should_save=False, save_path=None):
+def getShellcodeWorkspace(
+    buf, arch, base=SHELLCODE_BASE, entry_point=0, analyze=True, should_save=False, save_path=None
+):
     """
     Load shellcode into memory object and generate vivisect workspace.
     Thanks to Tom for most of the code.
@@ -279,16 +282,16 @@ def getShellcodeWorkspace(buf, arch, base=SHELLCODE_BASE, entry_point=0, analyze
     md5.update(buf)
 
     vw = vivisect.VivWorkspace()
-    vw.addFile('shellcode', base, md5.hexdigest())
-    vw.setMeta('Architecture', arch)
-    vw.setMeta('Platform', 'windows')
+    vw.addFile("shellcode", base, md5.hexdigest())
+    vw.setMeta("Architecture", arch)
+    vw.setMeta("Platform", "windows")
     # blob gives weaker results in some cases
     # so we will update this below
-    vw.setMeta('Format', 'pe')
+    vw.setMeta("Format", "pe")
     vw._snapInAnalysisModules()
 
-    vw.addMemoryMap(base, envi.memory.MM_RWX, 'shellcode', buf)
-    vw.addSegment(base, len(buf), 'shellcode_0x%x' % base, 'shellcode')
+    vw.addMemoryMap(base, envi.memory.MM_RWX, "shellcode", buf)
+    vw.addSegment(base, len(buf), "shellcode_0x%x" % base, "shellcode")
 
     vw.addEntryPoint(base + entry_point)  # defaults to start of shellcode
 
@@ -296,7 +299,7 @@ def getShellcodeWorkspace(buf, arch, base=SHELLCODE_BASE, entry_point=0, analyze
         setVwVivisectLibraryVersion(vw)
         vw.analyze()
 
-    vw.setMeta('Format', 'blob')
+    vw.setMeta("Format", "blob")
 
     if should_save:
         if save_path is None:
@@ -393,7 +396,7 @@ def get_prev_loc(vw, va):
         prev_item = vw.getLocation(this_va - 1)
 
     if prev_item is None:
-        raise RuntimeError('failed to find prev location for va: %x' % va)
+        raise RuntimeError("failed to find prev location for va: %x" % va)
 
     return prev_item
 
@@ -401,24 +404,24 @@ def get_prev_loc(vw, va):
 def get_prev_opcode(vw, va):
     lva, lsize, ltype, linfo = get_prev_loc(vw, va)
     if ltype != vivisect.const.LOC_OP:
-        raise RuntimeError('failed to find prev instruction for va: %x' % va)
+        raise RuntimeError("failed to find prev instruction for va: %x" % va)
 
     try:
         op = vw.parseOpcode(lva)
     except Exception:
-        logger.warning('failed to parse prev instruction for va: %x', va)
+        logger.warning("failed to parse prev instruction for va: %x", va)
         raise
 
     return op
 
 
 def get_all_xrefs_from(vw, va):
-    '''
+    """
     get all xrefs, including fallthrough instructions, from this address.
 
     vivisect doesn't consider fallthroughs as xrefs.
     see: https://github.com/fireeye/flare-ida/blob/7207a46c18a81ad801720ce0595a151b777ef5d8/python/flare/jayutils.py#L311
-    '''
+    """
     op = vw.parseOpcode(va)
     for tova, bflags in op.getBranches():
         if bflags & envi.BR_PROC:
@@ -427,12 +430,12 @@ def get_all_xrefs_from(vw, va):
 
 
 def get_all_xrefs_to(vw, va):
-    '''
+    """
     get all xrefs, including fallthrough instructions, to this address.
 
     vivisect doesn't consider fallthroughs as xrefs.
     see: https://github.com/fireeye/flare-ida/blob/7207a46c18a81ad801720ce0595a151b777ef5d8/python/flare/jayutils.py#L311
-    '''
+    """
     for xref in vw.getXrefsTo(va):
         yield xref
 
@@ -460,7 +463,7 @@ class CFG(object):
             try:
                 lva, _, ltype, _ = get_prev_loc(self.vw, bb.va + bb.size)
                 if ltype != vivisect.const.LOC_OP:
-                    raise RuntimeError('failed to find prev instruction for va: %x' % (bb.va + bb.size))
+                    raise RuntimeError("failed to find prev instruction for va: %x" % (bb.va + bb.size))
                 self.bb_by_end[lva] = bb
             except RuntimeError as e:
                 # viv detects "function blocks" that we interpret as "basic blocks".
@@ -527,7 +530,7 @@ class CFG(object):
 
 
 def get_strings(vw):
-    '''
+    """
     enumerate the strings in the given vivisect workspace.
 
     Args:
@@ -535,23 +538,23 @@ def get_strings(vw):
 
     Yields:
       Tuple[int, str]: the address, string pair.
-    '''
+    """
     for loc in vw.getLocations(ltype=vivisect.const.LOC_STRING):
         va = loc[vivisect.const.L_VA]
         size = loc[vivisect.const.L_SIZE]
-        yield va, vw.readMemory(va, size).decode('ascii')
+        yield va, vw.readMemory(va, size).decode("ascii")
 
     for loc in vw.getLocations(ltype=vivisect.const.LOC_UNI):
         va = loc[vivisect.const.L_VA]
         size = loc[vivisect.const.L_SIZE]
         try:
-            yield va, vw.readMemory(va, size).decode('utf-16le')
+            yield va, vw.readMemory(va, size).decode("utf-16le")
         except UnicodeDecodeError:
             continue
 
 
 def is_valid_address(vw, va):
-    '''
+    """
     test if the given address is valid in the given vivisect workspace.
 
     Args:
@@ -560,12 +563,12 @@ def is_valid_address(vw, va):
 
     Returns:
       bool: True if the given address is valid in the given workspace.
-    '''
+    """
     return vw.probeMemory(va, 1, envi.memory.MM_READ)
 
 
 def get_function_constants(vw, fva):
-    '''
+    """
     enumerate the immediate constants referenced by instructions in the given function.
     does not yield valid addresses in the given workspace.
 
@@ -575,7 +578,7 @@ def get_function_constants(vw, fva):
 
     Yields:
       int: immediate constant referenced by an instruction.
-    '''
+    """
     f = Function(vw, fva)
     for bb in f.basic_blocks:
         for i in bb.instructions:
@@ -591,7 +594,7 @@ def get_function_constants(vw, fva):
 
 
 def get_section_data(pe, section):
-    '''
+    """
     fetch the raw data of the given section.
 
     Args:
@@ -600,7 +603,7 @@ def get_section_data(pe, section):
 
     Returns:
       bytes: the raw bytes of the section.
-    '''
+    """
     return pe.readAtOffset(section.PointerToRawData, section.SizeOfRawData)
 
 
@@ -622,20 +625,20 @@ class Debugger(object):
         self.v = v
 
     def __getattr__(self, k):
-        '''
+        """
         support reg access shortcut, like::
             print(hex(dbg.pc))
             print(hex(dbg.rax))
         register names are lowercase.
         `pc` is a shortcut for the platform program counter.
-        '''
-        if k == 'v':
+        """
+        if k == "v":
             return super(object, self).__getattr__(k)
-        elif k == 'pc' or k == 'program_counter':
+        elif k == "pc" or k == "program_counter":
             return self.v.getTrace().getRegisterByName("eip")
-        elif k == 'stack_pointer':
+        elif k == "stack_pointer":
             return self.v.getTrace().getRegisterByName("esp")
-        elif k == 'base_pointer':
+        elif k == "base_pointer":
             return self.v.getTrace().getRegisterByName("ebp")
         elif k in self.REGISTERS:
             return self.v.getTrace().getRegisterByName(k)
@@ -643,20 +646,20 @@ class Debugger(object):
             return self.v.__getattribute__(k)
 
     def __setattr__(self, k, v):
-        '''
+        """
         set reg shortcut, like::
             dbg.pc  = 0x401000
             dbg.rax = 0xAABBCCDD
         register names are lowercase.
         `pc` is a shortcut for the platform program counter.
-        '''
-        if k == 'v':
+        """
+        if k == "v":
             object.__setattr__(self, k, v)
-        elif k == 'pc' or k == 'program_counter':
+        elif k == "pc" or k == "program_counter":
             return self.v.getTrace().setRegisterByName("eip", v)
-        elif k == 'stack_pointer':
+        elif k == "stack_pointer":
             return self.v.getTrace().setRegisterByName("esp", v)
-        elif k == 'base_pointer':
+        elif k == "base_pointer":
             return self.v.getTrace().setRegisterByName("ebp", v)
         elif k in self.REGISTERS:
             return self.v.getTrace().setRegisterByName(k, v)
@@ -677,7 +680,7 @@ class Debugger(object):
 
     def read_ascii(self, va):
         buf = self.read_memory(va, 1024)
-        return buf.partition(b'\x00')[0].decode('ascii')
+        return buf.partition(b"\x00")[0].decode("ascii")
 
     def pop(self):
         v = self.read_dword(self.esp)
