@@ -1,11 +1,10 @@
 import logging
 
-import vivisect
 import envi as v_envi
+import vivisect
 import envi.memory as v_mem
 import visgraph.pathcore as vg_path
 from envi.archs.i386.disasm import PREFIX_REP
-
 
 logger = logging.getLogger(__name__)
 

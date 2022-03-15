@@ -8,7 +8,6 @@ import flirt
 import viv_utils
 import viv_utils.flirt
 
-
 logger = logging.getLogger("get_flirt_matches")
 
 

@@ -5,11 +5,10 @@ import argparse
 import binascii
 
 import flirt
+import vivisect.const
 
 import viv_utils
 import viv_utils.flirt
-import vivisect.const
-
 
 logger = logging.getLogger("get_flirt_matches")
 

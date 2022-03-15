@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 try:
     import idc
     import idaapi
-    import idautils
     import ida_ida
     import ida_nalt
     import idautils

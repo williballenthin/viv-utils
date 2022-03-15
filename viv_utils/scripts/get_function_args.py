@@ -4,7 +4,6 @@ import logging
 import viv_utils
 import viv_utils.emulator_drivers
 
-
 g_pp = pprint.PrettyPrinter()
 
 

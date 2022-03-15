@@ -4,7 +4,6 @@ import pytest
 
 import viv_utils
 
-
 CD = Path(__file__).parent
 DATA = CD / "data"
 
