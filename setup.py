@@ -42,7 +42,6 @@ setuptools.setup(
             "black==22.1.0",
             "isort==5.10.1",
             "mypy==0.940",
-
             "types-setuptools==57.4.10",
         ],
     },
