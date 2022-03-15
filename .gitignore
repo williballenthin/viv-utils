@@ -66,3 +66,4 @@ target/
 .ipynb_checkpoints
 >>>>>>> 5e221b7233993e6b9c661f6c6b37c733cddd4ea9
 .idea
+.direnv
