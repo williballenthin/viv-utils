@@ -3,9 +3,9 @@ from fixtures import *
 import viv_utils.emulator_drivers as vudrv
 
 
-
 class CoverageMonitor(vudrv.Monitor):
     """capture the emulated addresses"""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.addresses = set()
@@ -69,6 +69,7 @@ def test_dbg_driver_stepo(pma01):
 
 class CreateMutexAHook(vudrv.Hook):
     """capture the mutex names passed to CreateMutexA"""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.mutexes = set()

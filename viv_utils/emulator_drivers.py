@@ -111,7 +111,9 @@ class EmulatorDriver:
 
     def readStackString(self, offset, maxlength=0x1000):
         """naively read ascii string"""
-        return self._emu.readMemory(self._emu.getStackCounter() + offset, maxlength).partition(b"\x00")[0].decode("ascii")
+        return (
+            self._emu.readMemory(self._emu.getStackCounter() + offset, maxlength).partition(b"\x00")[0].decode("ascii")
+        )
 
     def __getattr__(self, name):
         # look just like an emulator
