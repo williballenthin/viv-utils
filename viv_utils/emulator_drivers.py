@@ -184,6 +184,8 @@ class EmulatorDriver(object):
                     # not ideal, but works in the common case
                     self._logger.debug("monitor hook handled call: %s", callname)
                     return True
+            except StopEmulation:
+                raise
             except Exception as e:
                 mon.logAnomaly(emu, pc,
                         "%s.apicall failed: %s" % (mon.__class__.__name__, e))
@@ -196,13 +198,15 @@ class EmulatorDriver(object):
                 if ret is not None:
                     self._logger.debug("driver hook handled call: %s", callname)
                     return True
-                if callname:
-                    self._logger.debug("driver hook API call NOT handled: %s", callname)
+            except StopEmulation:
+                raise
             except UnsupportedFunction:
                 continue
             except Exception as e:
                 mon.logAnomaly(emu, pc,
                         "%s.apicall failed: %s" % (hook.__class__.__name__, e))
+        if callname and callname not in ("UnknownApi", "?"):
+            self._logger.debug("driver hook API call NOT handled: %s", callname)
 
         if callname in emu.hooks:
             hook = emu.hooks.get(callname)
@@ -210,6 +214,8 @@ class EmulatorDriver(object):
                 hook(self, callconv, api, argv)
                 self._logger.debug("emu hook handled call: %s", callname)
                 return True
+            except StopEmulation:
+                raise
             except Exception as e:
                 mon.logAnomaly(emu, pc,
                         "%s.apicall failed: %s" % (callname, e))
@@ -495,6 +501,8 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                         self._logger.debug('runFunction continuing after unsupported instruction: 0x%08x %s',
                                e.op.va, e.op.mnem)
                         emu.setProgramCounter(e.op.va + e.op.size)
+                except StopEmulation:
+                    raise
                 except Exception as e:
                     self._logger.warning("error during emulation of function: %s", e)#, exc_info=True)
                     for mon in self._monitors:
