@@ -38,21 +38,6 @@ class Hook:
 
 
 class Monitor(vivisect.impemu.monitor.EmulationMonitor):
-    def __init__(self, vw):
-        vivisect.impemu.monitor.EmulationMonitor.__init__(self)
-        self._vw = vw
-        self._logger = logging.getLogger("Monitor")
-
-    def getStackValue(self, emu, offset):
-        return emu.readMemoryFormat(emu.getStackCounter() + offset, "<P")[0]
-
-    def dumpStack(self, emu, num):
-        logger.debug("monitor: stack: ESP: 0x%x", emu.getStackCounter())
-        for i in range(num):
-            logger.debug(
-                "                ESP + 0x%x: 0x%x", emu.imem_psize * i, self.getStackValue(emu, emu.imem_psize * i)
-            )
-
     def prehook(self, emu, op, startpc):
         pass
 
@@ -144,12 +129,14 @@ class EmulatorDriver:
         emu = self._emu
 
         api = emu.getCallApi(pc)
-        rtype, rname, convname, callname, funcargs = api
+        _, _, convname, callname, funcargs = api
+
         if convname:
             callconv = emu.getCallingConvention(convname)
         else:
             logger.debug("driver: no call convention available at 0x%x. Using stdcall as default.", pc)
             callconv = emu.getCallingConvention("stdcall")
+
         argv = []
         if callconv:
             argv = callconv.getCallArgs(emu, len(funcargs))
@@ -169,7 +156,7 @@ class EmulatorDriver:
                     logger.debug("driver: monitor hook handled call: %s", callname)
                     return True
             except Exception as e:
-                mon.logAnomaly(emu, pc, "%s.apicall failed: %s" % (mon.__class__.__name__, e))
+                logger.debug("%s.apicall failed: %s", mon.__class__.__name__, e)
 
         for hook in self._hooks:
             try:
@@ -184,7 +171,7 @@ class EmulatorDriver:
             except UnsupportedFunction:
                 continue
             except Exception as e:
-                mon.logAnomaly(emu, pc, "%s.apicall failed: %s" % (hook.__class__.__name__, e))
+                logger.debug("%s.hook failed: %s", hook.__class__.__name__, e)
 
         if callname in emu.hooks:
             hook = emu.hooks.get(callname)
@@ -193,7 +180,7 @@ class EmulatorDriver:
                 logger.debug("driver: emu hook handled call: %s", callname)
                 return True
             except Exception as e:
-                mon.logAnomaly(emu, pc, "%s.apicall failed: %s" % (callname, e))
+                logger.debug("emu.hook.%s failed: %s", callname, e)
 
         # default case
         return False
@@ -266,8 +253,8 @@ class DebuggerEmulatorDriver(EmulatorDriver):
       such as stepi, stepo, call, etc.
     """
 
-    def __init__(self, emu):
-        super(DebuggerEmulatorDriver, self).__init__(emu)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._bps = set([])
 
     def step(self, avoid_calls):
@@ -294,7 +281,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         return self.step(False)
 
     def runToCall(self, max_instruction_count=1000):
-        """stepi until ret instruction"""
+        """stepi until call instruction"""
         emu = self._emu
         for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
@@ -322,7 +309,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         raise InstructionRangeExceededError(pc)
 
     def runToVa(self, va, max_instruction_count=1000):
-        """stepi until ret instruction"""
+        """stepi until given address"""
         emu = self._emu
         for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
