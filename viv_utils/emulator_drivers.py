@@ -157,6 +157,8 @@ class EmulatorDriver:
                     # not ideal, but works in the common case
                     logger.debug("driver: monitor hook handled call: %s", callname)
                     return True
+            except StopEmulation:
+                raise
             except Exception as e:
                 logger.debug("%s.apicall failed: %s", mon.__class__.__name__, e)
 
@@ -168,8 +170,11 @@ class EmulatorDriver:
                 if ret is not None:
                     logger.debug("driver: hook handled call: %s", callname)
                     return True
-                if callname:
+
+                if callname and callname not in ("UnknownApi", "?"):
                     logger.debug("driver: hook API call NOT handled: %s", callname)
+            except StopEmulation:
+                raise
             except UnsupportedFunction:
                 continue
             except Exception as e:
@@ -181,6 +186,8 @@ class EmulatorDriver:
                 hook(self, callconv, api, argv)
                 logger.debug("driver: emu hook handled call: %s", callname)
                 return True
+            except StopEmulation:
+                raise
             except Exception as e:
                 logger.debug("emu.hook.%s failed: %s", callname, e)
 
@@ -472,6 +479,8 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                             e.op.mnem,
                         )
                         emu.setProgramCounter(e.op.va + e.op.size)
+                except StopEmulation:
+                    raise
                 except Exception as e:
                     logger.warning("driver: error during emulation of function: %s", e)
                     for mon in self._monitors:
