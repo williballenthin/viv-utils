@@ -99,9 +99,9 @@ class EmulatorDriver:
 
         return callname in emu.hooks
 
-    def readString(self, va, maxlength=0x1000):
+    def readString(self, va, maxlength=0x100):
         """naively read ascii string"""
-        return self._emu.readMemory(va, maxlength).partition("\x00")[0]
+        return self._emu.readMemory(va, maxlength).partition(b"\x00")[0].decode("ascii")
 
     def getStackValue(self, offset):
         return self._emu.readMemoryFormat(self._emu.getStackCounter() + offset, "<P")[0]
@@ -111,7 +111,7 @@ class EmulatorDriver:
 
     def readStackString(self, offset, maxlength=0x1000):
         """naively read ascii string"""
-        return self._emu.readMemory(self._emu.getStackCounter() + offset, maxlength).partition("\x00")[0]
+        return self._emu.readMemory(self._emu.getStackCounter() + offset, maxlength).partition(b"\x00")[0].decode("ascii")
 
     def __getattr__(self, name):
         # look just like an emulator
