@@ -1,3 +1,5 @@
+import collections
+
 from fixtures import *
 
 import viv_utils.emulator_drivers as vudrv
@@ -8,10 +10,10 @@ class CoverageMonitor(vudrv.Monitor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.addresses = set()
+        self.addresses = collections.Counter()
 
     def prehook(self, emu, op, startpc):
-        self.addresses.add(startpc)
+        self.addresses[startpc] += 1
 
 
 def test_driver_monitor(pma01):
@@ -20,15 +22,13 @@ def test_driver_monitor(pma01):
     cov = CoverageMonitor()
     drv.add_monitor(cov)
 
-    drv.setProgramCounter(0x10001010)
-
     # 10001010 B8 F8 11 00 00          mov     eax, 11F8h
-    assert drv.getProgramCounter() == 0x10001010
-
-    drv.stepi()
-
     # 10001015 E8 06 02 00 00          call    __alloca_probe
+
+    drv.setProgramCounter(0x10001010)
+    drv.stepi()
     assert drv.getProgramCounter() == 0x10001015
+
     assert 0x10001010 in cov.addresses
     assert 0x10001015 not in cov.addresses
 
