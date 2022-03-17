@@ -251,7 +251,7 @@ class EmulatorDriver(EmuHelperMixin):
                 logger.debug("driver: emu hook handled call: %s", callname)
                 return True
 
-        if callname:
+        if callname and callname not in ("UnknownApi", "?"):
             logger.debug("driver: API call NOT hooked: %s", callname)
 
         return False
@@ -541,6 +541,8 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
                             e.op.mnem,
                         )
                         emu.setProgramCounter(e.op.va + e.op.size)
+                except StopEmulation:
+                    raise
                 except Exception as e:
                     logger.warning("driver: error during emulation of function: %s", e)
                     for mon in self._monitors:
