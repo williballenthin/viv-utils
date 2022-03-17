@@ -349,8 +349,9 @@ class DebuggerEmulatorDriver(EmulatorDriver):
                 h = hits.get(pc, 0)
                 h += 1
                 if h > maxhit:
-                    # instead of returning skip over (loops) to emulate more code
-                    self.skip(pc)
+                    # future improvement, detect infinite or long loop and break out to emulate more code
+                    # instead of exit here
+                    return
                 hits[pc] = h
             if pc in self._bps:
                 raise BreakpointHit()
@@ -359,10 +360,6 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             else:
                 self.stepi()
         raise InstructionRangeExceededError(pc)
-
-    def skip(self, pc):
-        op = self._emu.parseOpcode(pc)
-        self._emu.setProgramCounter(pc + len(op))
 
     def addBreakpoint(self, va):
         self._bps.add(va)
