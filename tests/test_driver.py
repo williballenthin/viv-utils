@@ -67,14 +67,14 @@ def test_dbg_driver_stepo(pma01):
     assert drv.getProgramCounter() == 0x1000134A
 
 
-class CreateMutexAHook(vudrv.Hook):
+class CreateMutexAHook:
     """capture the mutex names passed to CreateMutexA"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.mutexes = set()
 
-    def hook(self, callname, drv: vudrv.EmulatorDriver, callconv, api, argv):
+    def __call__(self, callname, drv, callconv, api, argv):
         if callname != "kernel32.CreateMutexA":
             return
 

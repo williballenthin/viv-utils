@@ -1,9 +1,11 @@
 import logging
+from typing import List, Tuple, Callable
 
 import envi as v_envi
 import vivisect
 import envi.memory as v_mem
 import visgraph.pathcore as vg_path
+from typing_extensions import TypeAlias
 from envi.archs.i386.disasm import PREFIX_REP
 
 logger = logging.getLogger(__name__)
@@ -17,10 +19,6 @@ class BreakpointHit(Exception):
     pass
 
 
-class UnsupportedFunction(Exception):
-    pass
-
-
 class InstructionRangeExceededError(Exception):
     def __init__(self, pc):
         super(InstructionRangeExceededError, self).__init__()
@@ -30,11 +28,50 @@ class InstructionRangeExceededError(Exception):
         return "InstructionRangeExceededError(ended at instruction 0x%08X)" % self.pc
 
 
-class Hook:
-    def hook(self, callname, emu, callconv, api, argv):
-        # must return something other than None if handled
-        # raise UnsupportedFunction to pass
-        raise UnsupportedFunction()
+DataType: TypeAlias = str
+SymbolName: TypeAlias = str
+
+CallingConvention: TypeAlias = str
+ReturnType: TypeAlias = DataType
+ReturnName: TypeAlias = str
+FunctionName: TypeAlias = SymbolName
+ArgType: TypeAlias = DataType
+ArgName: TypeAlias = SymbolName
+FunctionArg: TypeAlias = Tuple[ArgType, ArgName]
+# type returned by `vw.getImpApi`
+API: TypeAlias = Tuple[ReturnType, ReturnName, CallingConvention, FunctionName, List[FunctionArg]]
+# shortcut
+Emulator: TypeAlias = vivisect.impemu.emulator.WorkspaceEmulator
+
+# a hook overrides an API encountered by an emulator.
+#
+# returning True indicates the hook handled the function.
+# this should include returning from the function and cleaning up the stack, if appropriate.
+#
+# hooks can fetch the current $PC, registers, mem, etc. via the provided emulator parameter.
+#
+# a hook is a callable, such as a function or class with `__call__`,
+# if the hook is "stateless", use a simple function:
+#
+#     hook_OutputDebugString(name, emu, cconv, api, argv):
+#         if name != "kernel32.OutputDebugString": return False
+#         logger.debug("OutputDebugString: %s", emu.readString(argv[0]))
+#         cconv.execCallReturn(emu, 0, len(argv))
+#         return True
+#
+# if the hook is "stateful", such as a hook that records arguments, use a class:
+#
+#     class CreateFileAHook:
+#         def __init__(self):
+#             self.paths = set()
+#
+#         def __call__(self, name, emu, cconv, api, argv):
+#             if name != "kernel32.CreateFileA": return False
+#             self.paths.add(emu.readString(argv[0]))
+#             cconv.execCallReturn(emu, 0, len(argv))
+#             return True
+#
+Hook = Callable[[FunctionName, Emulator, CallingConvention, API, List[int]], bool]
 
 
 class Monitor(vivisect.impemu.monitor.EmulationMonitor):
@@ -45,17 +82,44 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor):
         pass
 
     def apicall(self, driver, op, pc, api, argv):
-        # if non-None is returned, then it signals that the API call was handled
-        #   and this function *must* handle cleaning up the stack
-        pass
+        # returning True signals that the API call was handled.
+        return False
 
     def logAnomaly(self, emu, pc, e):
         logger.warning("monitor: anomaly: %s", e)
 
 
-class EmulatorDriver:
+class EmuHelperMixin:
+    def readString(self, va, maxlength=0x100):
+        """naively read ascii string"""
+        return self.readMemory(va, maxlength).partition(b"\x00")[0].decode("ascii")
+
+    def getStackValue(self, offset):
+        return self.readMemoryFormat(self._emu.getStackCounter() + offset, "<P")[0]
+
+    def readStackMemory(self, offset, length):
+        return self.readMemory(self._emu.getStackCounter() + offset, length)
+
+    def readStackString(self, offset, maxlength=0x1000):
+        """naively read ascii string"""
+        return self.readMemory(self._emu.getStackCounter() + offset, maxlength).partition(b"\x00")[0].decode("ascii")
+
+
+class EmulatorDriver(EmuHelperMixin):
     """
-    this is a type of object that knows how to drive an emulator in various ways.
+    this is a superclass for strategies for controlling viv emulator instances.
+
+    you can also treat it as an emulator instance, e.g.:
+
+        emu = vw.getEmulator()
+        drv = EmulatorDriver(emu)
+        drv.getProgramCounter()
+
+    note it also inherits from EmuHelperMixin, so there are convenience routines:
+
+        emu = vw.getEmulator()
+        drv = EmulatorDriver(emu)
+        drv.readString(0x401000)
     """
 
     def __init__(self, emu):
@@ -64,13 +128,36 @@ class EmulatorDriver:
         self._monitors = set([])
         self._hooks = set([])
 
+    def __getattr__(self, name):
+        # look just like an emulator
+        return getattr(self._emu, name)
+
     def add_monitor(self, mon):
+        """
+        monitors are collections of callbacks that are invoked at various places:
+
+          - pre instruction emulation
+          - post instruction emulation
+          - during API call
+
+        see the `Monitor` superclass.
+
+        install monitors using this routine `add_monitor`.
+        there can be multiple monitors added.
+        """
         self._monitors.add(mon)
 
     def remove_monitor(self, mon):
         self._monitors.remove(mon)
 
     def add_hook(self, hook):
+        """
+        hooks are functions that can override APIs encountered during emumation.
+        see the `Hook` superclass.
+
+        there can be multiple hooks added, even for the same API.
+        hooks are invoked in the order that they were added.
+        """
         self._hooks.add(hook)
 
     def remove_hook(self, hook):
@@ -98,26 +185,6 @@ class EmulatorDriver:
         rtype, rname, convname, callname, funcargs = api
 
         return callname in emu.hooks
-
-    def readString(self, va, maxlength=0x100):
-        """naively read ascii string"""
-        return self._emu.readMemory(va, maxlength).partition(b"\x00")[0].decode("ascii")
-
-    def getStackValue(self, offset):
-        return self._emu.readMemoryFormat(self._emu.getStackCounter() + offset, "<P")[0]
-
-    def readStackMemory(self, offset, length):
-        return self._emu.readMemory(self._emu.getStackCounter() + offset, length)
-
-    def readStackString(self, offset, maxlength=0x1000):
-        """naively read ascii string"""
-        return (
-            self._emu.readMemory(self._emu.getStackCounter() + offset, maxlength).partition(b"\x00")[0].decode("ascii")
-        )
-
-    def __getattr__(self, name):
-        # look just like an emulator
-        return getattr(self._emu, name)
 
     def doHook(self, pc, op):
         """
@@ -152,39 +219,41 @@ class EmulatorDriver:
         for mon in self._monitors:
             try:
                 r = mon.apicall(self, op, pc, api, argv)
-                if r is not None:
-                    # take the first result
-                    # not ideal, but works in the common case
-                    logger.debug("driver: monitor hook handled call: %s", callname)
-                    return True
             except Exception as e:
-                logger.debug("%s.apicall failed: %s", mon.__class__.__name__, e)
+                logger.debug("driver: %s.apicall failed: %s", mon.__class__.__name__, e)
+                continue
+            else:
+                if r:
+                    # note: short circuit
+                    logger.debug("driver: %s.apicall: handled call: %s", mon.__class__.__name__, callname)
+                    return True
 
         for hook in self._hooks:
             try:
-                ret = hook.hook(callname, self, callconv, api, argv)
-                # take the first result
-                # not ideal, but works in the common case
-                if ret is not None:
+                ret = hook(callname, self, callconv, api, argv)
+            except Exception as e:
+                logger.debug("driver: hook: %r failed: %s", hook, e)
+                continue
+            else:
+                if ret:
+                    # note: short circuit
                     logger.debug("driver: hook handled call: %s", callname)
                     return True
-                if callname:
-                    logger.debug("driver: hook API call NOT handled: %s", callname)
-            except UnsupportedFunction:
-                continue
-            except Exception as e:
-                logger.debug("%s.hook failed: %s", hook.__class__.__name__, e)
 
         if callname in emu.hooks:
             hook = emu.hooks.get(callname)
             try:
                 hook(self, callconv, api, argv)
+            except Exception as e:
+                logger.debug("driver: emu.hook.%s failed: %s", callname, e)
+            else:
+                # note: short circuit
                 logger.debug("driver: emu hook handled call: %s", callname)
                 return True
-            except Exception as e:
-                logger.debug("emu.hook.%s failed: %s", callname, e)
 
-        # default case
+        if callname:
+            logger.debug("driver: API call NOT hooked: %s", callname)
+
         return False
 
     def handleCall(self, pc, op, avoid_calls=False):
