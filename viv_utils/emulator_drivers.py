@@ -58,6 +58,7 @@ Emulator: TypeAlias = vivisect.impemu.emulator.WorkspaceEmulator
 #         _, _, cconv, name, _ = api
 #         if name != "kernel32.OutputDebugString": return False
 #         logger.debug("OutputDebugString: %s", emu.readString(argv[0]))
+#         cconv = emu.getCallingConvention(cconv)
 #         cconv.execCallReturn(emu, 0, len(argv))
 #         return True
 #
@@ -71,6 +72,7 @@ Emulator: TypeAlias = vivisect.impemu.emulator.WorkspaceEmulator
 #             _, _, cconv, name, _ = api
 #             if name != "kernel32.CreateFileA": return False
 #             self.paths.add(emu.readString(argv[0]))
+#             cconv = emu.getCallingConvention(cconv)
 #             cconv.execCallReturn(emu, 0, len(argv))
 #             return True
 #

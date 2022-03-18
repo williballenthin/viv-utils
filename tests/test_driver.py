@@ -83,6 +83,7 @@ class CreateMutexAHook:
         mutex = emu.readString(argv[2])
         self.mutexes.add(mutex)
 
+        cconv = emu.getCallingConvention(cconv)
         cconv.execCallReturn(emu, 0, len(argv))
 
         return True
