@@ -47,6 +47,7 @@ Emulator: TypeAlias = vivisect.impemu.emulator.WorkspaceEmulator
 #
 # returning True indicates the hook handled the function.
 # this should include returning from the function and cleaning up the stack, if appropriate.
+# a hook can also raise `StopEmulation` to ...stop the emulator.
 #
 # hooks can fetch the current $PC, registers, mem, etc. via the provided emulator parameter.
 #
@@ -219,6 +220,8 @@ class EmulatorDriver(EmuHelperMixin):
         for mon in self._monitors:
             try:
                 r = mon.apicall(self, op, pc, api, argv)
+            except StopEmulation:
+                raise
             except Exception as e:
                 logger.debug("driver: %s.apicall failed: %s", mon.__class__.__name__, e)
                 continue
@@ -231,6 +234,8 @@ class EmulatorDriver(EmuHelperMixin):
         for hook in self._hooks:
             try:
                 ret = hook(callname, self, callconv, api, argv)
+            except StopEmulation:
+                raise
             except Exception as e:
                 logger.debug("driver: hook: %r failed: %s", hook, e)
                 continue
@@ -244,6 +249,8 @@ class EmulatorDriver(EmuHelperMixin):
             hook = emu.hooks.get(callname)
             try:
                 hook(self, callconv, api, argv)
+            except StopEmulation:
+                raise
             except Exception as e:
                 logger.debug("driver: emu.hook.%s failed: %s", callname, e)
             else:
