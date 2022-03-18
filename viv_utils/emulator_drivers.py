@@ -54,7 +54,8 @@ Emulator: TypeAlias = vivisect.impemu.emulator.WorkspaceEmulator
 # a hook is a callable, such as a function or class with `__call__`,
 # if the hook is "stateless", use a simple function:
 #
-#     hook_OutputDebugString(name, emu, cconv, api, argv):
+#     hook_OutputDebugString(emu, api, argv):
+#         _, _, cconv, name, _ = api
 #         if name != "kernel32.OutputDebugString": return False
 #         logger.debug("OutputDebugString: %s", emu.readString(argv[0]))
 #         cconv.execCallReturn(emu, 0, len(argv))
@@ -66,13 +67,14 @@ Emulator: TypeAlias = vivisect.impemu.emulator.WorkspaceEmulator
 #         def __init__(self):
 #             self.paths = set()
 #
-#         def __call__(self, name, emu, cconv, api, argv):
+#         def __call__(self, emu, api, argv):
+#             _, _, cconv, name, _ = api
 #             if name != "kernel32.CreateFileA": return False
 #             self.paths.add(emu.readString(argv[0]))
 #             cconv.execCallReturn(emu, 0, len(argv))
 #             return True
 #
-Hook = Callable[[FunctionName, Emulator, CallingConvention, API, List[int]], bool]
+Hook = Callable[[Emulator, API, List[int]], bool]
 
 
 class Monitor(vivisect.impemu.monitor.EmulationMonitor):
@@ -82,7 +84,7 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor):
     def posthook(self, emu, op, endpc):
         pass
 
-    def apicall(self, driver, op, pc, api, argv):
+    def apicall(self, emu, api, argv):
         # returning True signals that the API call was handled.
         return False
 
@@ -219,7 +221,7 @@ class EmulatorDriver(EmuHelperMixin):
 
         for mon in self._monitors:
             try:
-                r = mon.apicall(self, op, pc, api, argv)
+                r = mon.apicall(self, api, argv)
             except StopEmulation:
                 raise
             except Exception as e:
@@ -233,7 +235,7 @@ class EmulatorDriver(EmuHelperMixin):
 
         for hook in self._hooks:
             try:
-                ret = hook(callname, self, callconv, api, argv)
+                ret = hook(self, api, argv)
             except StopEmulation:
                 raise
             except Exception as e:
@@ -246,9 +248,12 @@ class EmulatorDriver(EmuHelperMixin):
                     return True
 
         if callname in emu.hooks:
+            # this is where vivisect-internal hooks are stored,
+            # such as those provided by impapi.
+            # note that we prefer locally configured hooks, first.
             hook = emu.hooks.get(callname)
             try:
-                hook(self, callconv, api, argv)
+                hook(self, api, argv)
             except StopEmulation:
                 raise
             except Exception as e:

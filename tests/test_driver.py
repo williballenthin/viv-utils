@@ -74,15 +74,17 @@ class CreateMutexAHook:
         super().__init__(*args, **kwargs)
         self.mutexes = set()
 
-    def __call__(self, callname, drv, callconv, api, argv):
-        if callname != "kernel32.CreateMutexA":
+    def __call__(self, emu, api, argv):
+        _, _, cconv, name, _ = api
+
+        if name != "kernel32.CreateMutexA":
             return
 
-        mutex = drv.readString(argv[2])
+        mutex = emu.readString(argv[2])
         self.mutexes.add(mutex)
 
-        _, _, _, callname, funcargs = api
-        callconv.execCallReturn(drv, 0, len(funcargs))
+        cconv.execCallReturn(emu, 0, len(argv))
+
         return True
 
 
