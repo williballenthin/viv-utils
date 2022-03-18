@@ -1,5 +1,6 @@
+import sys
 import logging
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Optional
 
 import envi as v_envi
 import vivisect
@@ -16,7 +17,8 @@ class StopEmulation(Exception):
 
 
 class BreakpointHit(Exception):
-    pass
+    def __init__(self, va: int):
+        self.va = va
 
 
 class InstructionRangeExceededError(Exception):
@@ -39,7 +41,7 @@ ArgType: TypeAlias = DataType
 ArgName: TypeAlias = SymbolName
 FunctionArg: TypeAlias = Tuple[ArgType, ArgName]
 # type returned by `vw.getImpApi`
-API: TypeAlias = Tuple[ReturnType, ReturnName, CallingConvention, FunctionName, List[FunctionArg]]
+API: TypeAlias = Tuple[ReturnType, ReturnName, Optional[CallingConvention], FunctionName, List[FunctionArg]]
 # shortcut
 Emulator: TypeAlias = vivisect.impemu.emulator.WorkspaceEmulator
 
@@ -184,6 +186,12 @@ class EmulatorDriver(EmuHelperMixin):
     def is_ret(op):
         return bool(op.iflags & v_envi.IF_RET)
 
+    def get_calling_convention(self, convname: Optional[str]):
+        if convname:
+            return self._emu.getCallingConvention(convname)
+        else:
+            return self._emu.getCallingConvention("stdcall")
+
     def _handle_hook(self):
         """
         return True if a hook handled the call, False otherwise.
@@ -194,17 +202,13 @@ class EmulatorDriver(EmuHelperMixin):
         pc = emu.getProgramCounter()
 
         api = emu.getCallApi(pc)
-        _, _, cconv, callname, funcargs = api
+        _, _, convname, callname, funcargs = api
 
-        if cconv:
-            cconv = emu.getCallingConvention(cconv)
-        else:
-            logger.debug("driver: no call convention available at 0x%x. Using stdcall as default.", pc)
-            cconv = emu.getCallingConvention("stdcall")
+        callconv = self.get_calling_convention(convname)
 
         argv = []
-        if cconv:
-            argv = cconv.getCallArgs(emu, len(funcargs))
+        if callconv:
+            argv = callconv.getCallArgs(emu, len(funcargs))
 
         # attempt to invoke hooks to handle function calls.
         # priority:
@@ -263,17 +267,20 @@ class EmulatorDriver(EmuHelperMixin):
 
     def handle_call(self, op, avoid_calls=False):
         """
-        pc should be at a call instruction.
-        if its an indirect call, like `call [0x401000]`, resolve the pointer first
-        (if its a direct call, like `call 0x401000`, then deal with 0x401000)
+        emulate a call instruction (pc should be at a the call instruction).
+        if the target is hooked, do the hook instead of executing it.
 
-        check to see if the function is hooked.
-          if its hooked, do the hook, and pc goes to next instruction after the call.
-          else,
-            if avoid_calls is false, step into the call, and pc is at first instruction of function.
-            if avoid_calls is true, step over the call, as best as possible.
-              this means attempting to clean up the stack if its a cdecl call.
-              also returning 0.
+        pending `avoid_calls`, try to step into or over the function.
+
+        general algorithm:
+
+            check to see if the function is hooked.
+            if its hooked, do the hook, and pc goes to next instruction after the call.
+            else,
+                if avoid_calls is false, step into the call, and pc is at first instruction of function.
+                if avoid_calls is true, step over the call, as best as possible.
+                this means attempting to clean up the stack if its a cdecl call.
+                also returning 0.
 
         return True if stepped into the function, False if the function is completely handled.
         """
@@ -282,13 +289,6 @@ class EmulatorDriver(EmuHelperMixin):
         pc = emu.getProgramCounter()
         emu.executeOpcode(op)
         target = emu.getProgramCounter()
-
-        _, _, convname, _, funcargs = emu.getCallApi(target)
-        if convname:
-            callconv = emu.getCallingConvention(convname)
-        else:
-            logger.debug("driver: no call convention available at 0x%x. Using stdcall as default.", target)
-            callconv = emu.getCallingConvention("stdcall")
 
         if self._handle_hook():
             # some hook handled the call,
@@ -309,6 +309,9 @@ class EmulatorDriver(EmuHelperMixin):
             #
             # attempt to clean up stack, as necessary.
             # assume return value is 0
+            _, _, convname, _, funcargs = emu.getCallApi(target)
+            callconv = self.get_calling_convention(convname)
+
             callconv.execCallReturn(emu, 0, len(funcargs))
             emu.setProgramCounter(pc + len(op))
 
@@ -327,27 +330,29 @@ class DebuggerEmulatorDriver(EmulatorDriver):
     """
     this is a EmulatorDriver that supports debugger-like operations,
       such as stepi, stepo, call, etc.
+
+    it also supports "breakpoints": a set of addresses such that,
+     when encountering the address, a `BreakpointHit` exception is raised.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._bps = set([])
 
-    def addBreakpoint(self, va):
-        self._bps.add(va)
-
-    def removeBreakpoint(self, va):
-        self._bps.remove(va)
-
-    def getBreakpoints(self):
-        return list(self._bps)
+        # this is a public member.
+        # add and remove breakpoints by manipulating this set.
+        self.breakpoints = set()
 
     def step(self, avoid_calls):
         emu = self._emu
+
         startpc = emu.getProgramCounter()
         op = emu.parseOpcode(startpc)
+
         for mon in self._monitors:
             mon.prehook(emu, op, startpc)
+
+        if startpc in self.breakpoints:
+            raise BreakpointHit(startpc)
 
         if self.is_call(op):  # or self.is_indirect_mem_jump(op):
             self.handle_call(op, avoid_calls=avoid_calls)
@@ -366,12 +371,18 @@ class DebuggerEmulatorDriver(EmulatorDriver):
     def stepi(self):
         return self.step(False)
 
+    def run(self, max_instruction_count=sys.maxsize):
+        for _ in range(max_instruction_count):
+            self.stepi()
+
+        raise InstructionRangeExceededError(self.getProgramCounter())
+
     def runToCall(self, max_instruction_count=1000):
         """stepi until call instruction"""
         emu = self._emu
         for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
-            if pc in self._bps:
+            if pc in self.breakpoints:
                 raise BreakpointHit()
             op = emu.parseOpcode(pc)
             if self.is_call(op):
@@ -385,7 +396,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         emu = self._emu
         for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
-            if pc in self._bps:
+            if pc in self.breakpoints:
                 raise BreakpointHit()
             op = emu.parseOpcode(pc)
             if self.is_ret(op):
@@ -399,7 +410,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         emu = self._emu
         for _ in range(max_instruction_count):
             pc = emu.getProgramCounter()
-            if pc in self._bps:
+            if pc in self.breakpoints:
                 raise BreakpointHit()
             if pc == va:
                 return
