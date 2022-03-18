@@ -1,8 +1,16 @@
 import collections
 
+import envi.const
 from fixtures import *
 
 import viv_utils.emulator_drivers as vudrv
+
+
+class LoggingMonitor(vudrv.Monitor):
+    """log the emulated addresses"""
+
+    def prehook(self, emu, op, startpc):
+        print("emu: 0x%x %s" % (startpc, op))
 
 
 class CoverageMonitor(vudrv.Monitor):
@@ -107,6 +115,70 @@ def test_driver_hook(pma01):
     drv.stepi()
     drv.stepi()
     assert drv.getProgramCounter() == 0x10001074
+    assert "SADFHUHF" in hk.mutexes
+
+
+def protect_memory(imem, va, size, perms):
+    # see: https://github.com/vivisect/vivisect/issues/511
+    maps = imem._map_defs
+    for i in range(len(maps)):
+        map = maps[i]
+        start, end, mmap, bytez = map
+        mva, msize, mperms, mfilename = mmap
+
+        if mva == va and msize == size:
+            maps[i] = [start, end, [mva, msize, perms, mfilename], bytez]
+            return
+
+    raise KeyError("unknown memory map: 0x%x (0x%x bytes)", va, size)
+
+
+def test_driver_hook_tailjump(pma01):
+    # patch:
+    #
+    # .text:10001067 68 38 60 02 10          push    offset Name     ; "SADFHUHF"
+    # .text:1000106C 50                      push    eax             ; bInitialOwner
+    # .text:1000106D 50                      push    eax             ; lpMutexAttributes
+    # .text:1000106E FF 15 08 20 00 10       call    ds:CreateMutexA
+    # .text:10001074 8D 4C 24 78             lea     ecx, [esp+1208h+var_1190]
+    #
+    # to:
+    #
+    # .text:10001067 68 38 60 02 10          push    offset Name     ; "SADFHUHF"
+    # .text:1000106C 50                      push    eax             ; bInitialOwner
+    # .text:1000106D 50                      push    eax             ; lpMutexAttributes
+    # .text:1000106E 68 79 10 00 10          push    offset loc_10001079
+    # .text:10001073 FF 25 08 20 00 10       jmp     ds:CreateMutexA
+    # .text:10001079 ...                     ...
+    #
+    # so that we have a tail jump to `CreateMutexA` (but with the return address on the stack).
+    # the hook handler should pick up on this, and handle the transition to `CreateMutexA` as a call.
+    #
+    # note: we have to patch the vw, because patching emu mem doesn't work.
+    # the emu instance reads opcodes from the vw not emu memory.
+    # see: https://github.com/vivisect/vivisect/issues/512
+    vw = pma01
+    mapva, size, perms, filename = vw.getMemoryMap(0x1000106E)
+    protect_memory(vw, mapva, size, envi.const.MM_RWX)
+    vw.writeMemory(0x1000106E, bytes.fromhex("68 79 10 00 10 FF 25 08 20 00 10"))
+    vw.clearOpcache()
+    assert vw.parseOpcode(0x1000106E).mnem == "push"
+    assert vw.parseOpcode(0x10001073).mnem == "jmp"
+    protect_memory(vw, mapva, size, perms)
+
+    emu = vw.getEmulator()
+    drv = vudrv.DebuggerEmulatorDriver(emu)
+    hk = CreateMutexAHook()
+    drv.add_hook(hk)
+
+    drv.setProgramCounter(0x10001067)
+    drv.stepi()
+    drv.stepi()
+    drv.stepi()
+    drv.stepi()
+    assert drv.parseOpcode(drv.getProgramCounter()).mnem == "jmp"
+    drv.stepi()
+    assert drv.getProgramCounter() == 0x10001079
     assert "SADFHUHF" in hk.mutexes
 
 

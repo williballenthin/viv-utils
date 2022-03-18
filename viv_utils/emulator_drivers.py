@@ -3,6 +3,7 @@ import logging
 from typing import List, Tuple, Callable, Optional
 
 import envi as v_envi
+import envi.exc
 import vivisect
 import envi.memory as v_mem
 import visgraph.pathcore as vg_path
@@ -175,12 +176,8 @@ class EmulatorDriver(EmuHelperMixin):
         return bool(op.iflags & v_envi.IF_CALL)
 
     @staticmethod
-    def is_indirect_mem_jump(op):
-        # jmp/call via thunk on x86
-        # jmp/call via import on x64
-        return op.mnem == "jmp" and isinstance(
-            op.opers[0], (v_envi.archs.i386.disasm.i386ImmMemOper, v_envi.archs.amd64.disasm.Amd64RipRelOper)
-        )
+    def is_jmp(op):
+        return op.mnem == "jmp"
 
     @staticmethod
     def is_ret(op):
@@ -293,7 +290,7 @@ class EmulatorDriver(EmuHelperMixin):
         if self._handle_hook():
             # some hook handled the call,
             # so make sure PC is at the next instruction
-            emu.setProgramCounter(pc + len(op))
+            assert emu.getProgramCounter() == pc + len(op)
 
             # hook handled it
             # pc is at instruction after call
@@ -311,9 +308,9 @@ class EmulatorDriver(EmuHelperMixin):
             # assume return value is 0
             _, _, convname, _, funcargs = emu.getCallApi(target)
             callconv = self.get_calling_convention(convname)
-
+            # this will jump to the return address from the stack.
             callconv.execCallReturn(emu, 0, len(funcargs))
-            emu.setProgramCounter(pc + len(op))
+            assert emu.getProgramCounter() == pc + len(op)
 
             # pc is at instruction after call
             return False
@@ -323,6 +320,84 @@ class EmulatorDriver(EmuHelperMixin):
             # and its available and executable.
 
             # pc is at first instruction in the call.
+            return True
+
+    def handle_jmp(self, op, avoid_calls=False):
+        """
+        emulate a jmp instruction.
+
+        most of the time, this is to implement loops and such.
+        however, occasionally we may encounter a "tail call";
+        that is, a jmp to the start of a function.
+        in these cases, we want to treat the transition like a call.
+
+        this function is like `handle_call` when the target of the
+         jump is the start of a recognized function/API.
+
+        returns True when the emulator followed the jmp and is now at the target.
+        returns False when the emulator handled a tail call and is now after the call.
+        """
+        emu = self._emu
+
+        pc = emu.getProgramCounter()
+
+        # if the target address has an associated API
+        # then this was a tail call (jump to function entry).
+        # otherwise, its just a normal jmp and our handling is done.
+        # careful to raise the segmentation violation for normal jmps.
+        try:
+            emu.executeOpcode(op)
+        except envi.exc.SegmentationViolation as e:
+            target = e.va
+            api = emu.getCallApi(pc)
+            if not api:
+                # normal jump, but to invalid location
+                # let caller handle the exception
+                raise
+        else:
+            target = emu.getProgramCounter()
+            api = emu.getCallApi(pc)
+            if not api:
+                # normal jump, to valid location.
+                # emulation is complete.
+                # pc is at the destination of the jump.
+                return True
+
+        # if we reach here, we're in a tail call,
+        # because there's an API found at this target address.
+
+        if self._handle_hook():
+            # some hook handled the call,
+            # so make sure PC is at the next instruction
+            assert emu.getProgramCounter() == pc + len(op)
+
+            # hook handled it.
+            # pc is at instruction after call.
+            return False
+
+        elif avoid_calls or emu.getVivTaint(target) or not emu.probeMemory(target, 0x1, v_mem.MM_EXEC):
+            # either:
+            #  - we don't to emulate into functions, or
+            #  - the target is unavailable/unresolved
+            #  - the target is not executable
+            #
+            # jump over the call instruction.
+            #
+            # attempt to clean up stack, as necessary.
+            # assume return value is 0
+            _, _, convname, _, funcargs = emu.getCallApi(target)
+            callconv = self.get_calling_convention(convname)
+            # this will jump to the return address from the stack.
+            callconv.execCallReturn(emu, 0, len(funcargs))
+
+            # pc is at the return address.
+            return False
+
+        else:
+            # we want to emulate into the function,
+            # and its available and executable.
+
+            # pc is at first instruction in the function.
             return True
 
 
@@ -354,9 +429,10 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         if startpc in self.breakpoints:
             raise BreakpointHit(startpc)
 
-        if self.is_call(op):  # or self.is_indirect_mem_jump(op):
+        if self.is_call(op):
             self.handle_call(op, avoid_calls=avoid_calls)
-            # TODO: split out handle_jmp
+        elif self.is_jmp(op):
+            self.handle_jmp(op, avoid_calls=avoid_calls)
         else:
             emu.executeOpcode(op)
 
