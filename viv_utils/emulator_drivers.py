@@ -194,17 +194,17 @@ class EmulatorDriver(EmuHelperMixin):
         pc = emu.getProgramCounter()
 
         api = emu.getCallApi(pc)
-        _, _, convname, callname, funcargs = api
+        _, _, cconv, callname, funcargs = api
 
-        if convname:
-            callconv = emu.getCallingConvention(convname)
+        if cconv:
+            cconv = emu.getCallingConvention(cconv)
         else:
             logger.debug("driver: no call convention available at 0x%x. Using stdcall as default.", pc)
-            callconv = emu.getCallingConvention("stdcall")
+            cconv = emu.getCallingConvention("stdcall")
 
         argv = []
-        if callconv:
-            argv = callconv.getCallArgs(emu, len(funcargs))
+        if cconv:
+            argv = cconv.getCallArgs(emu, len(funcargs))
 
         # attempt to invoke hooks to handle function calls.
         # priority:
@@ -261,7 +261,7 @@ class EmulatorDriver(EmuHelperMixin):
 
         return False
 
-    def handle_call(self, pc, op, avoid_calls=False):
+    def handle_call(self, op, avoid_calls=False):
         """
         pc should be at a call instruction.
         if its an indirect call, like `call [0x401000]`, resolve the pointer first
@@ -275,19 +275,15 @@ class EmulatorDriver(EmuHelperMixin):
               this means attempting to clean up the stack if its a cdecl call.
               also returning 0.
 
-        return True if stepped into the function, False if the function is completely handled
+        return True if stepped into the function, False if the function is completely handled.
         """
-        if not (self.is_call(op) or self.is_indirect_mem_jump(op)):
-            raise RuntimeError("not a call or jmp call")
-
         emu = self._emu
-        is_call = self.is_call(op)
 
+        pc = emu.getProgramCounter()
         emu.executeOpcode(op)
         target = emu.getProgramCounter()
 
-        api = emu.getCallApi(target)
-        rtype, rname, convname, callname, funcargs = api
+        _, _, convname, _, funcargs = emu.getCallApi(target)
         if convname:
             callconv = emu.getCallingConvention(convname)
         else:
@@ -295,32 +291,36 @@ class EmulatorDriver(EmuHelperMixin):
             callconv = emu.getCallingConvention("stdcall")
 
         if self._handle_hook():
-            if is_call:
-                # some hook handled the call,
-                # so make sure PC is at the next instruction
-                emu.setProgramCounter(pc + len(op))
-            # otherwise next PC is on stack
+            # some hook handled the call,
+            # so make sure PC is at the next instruction
+            emu.setProgramCounter(pc + len(op))
+
+            # hook handled it
+            # pc is at instruction after call
             return False
 
-        elif avoid_calls or emu.getVivTaint(target):
-            # jump over the call instruction
-            # return value --> 0
+        elif avoid_calls or emu.getVivTaint(target) or not emu.probeMemory(target, 0x1, v_mem.MM_EXEC):
+            # either:
+            #  - we don't to emulate into functions, or
+            #  - the target is unavailable/unresolved
+            #  - the target is not executable
+            #
+            # jump over the call instruction.
+            #
+            # attempt to clean up stack, as necessary.
+            # assume return value is 0
             callconv.execCallReturn(emu, 0, len(funcargs))
-            if is_call:
-                emu.setProgramCounter(pc + len(op))
+            emu.setProgramCounter(pc + len(op))
+
+            # pc is at instruction after call
             return False
 
-        elif not avoid_calls:
-            if emu.probeMemory(target, 0x1, v_mem.MM_EXEC):
-                # this is executable memory, so we're good
-                # op already emulated, just return
-                return True
-            else:
-                # this is some unknown region of memory, try to return
-                callconv.execCallReturn(emu, 0, len(funcargs))
-                if is_call:
-                    emu.setProgramCounter(pc + len(op))
-                return False
+        else:
+            # we want to emulate into the function,
+            # and its available and executable.
+
+            # pc is at first instruction in the call.
+            return True
 
 
 class DebuggerEmulatorDriver(EmulatorDriver):
@@ -333,6 +333,15 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         super().__init__(*args, **kwargs)
         self._bps = set([])
 
+    def addBreakpoint(self, va):
+        self._bps.add(va)
+
+    def removeBreakpoint(self, va):
+        self._bps.remove(va)
+
+    def getBreakpoints(self):
+        return list(self._bps)
+
     def step(self, avoid_calls):
         emu = self._emu
         startpc = emu.getProgramCounter()
@@ -340,8 +349,9 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         for mon in self._monitors:
             mon.prehook(emu, op, startpc)
 
-        if self.is_call(op) or self.is_indirect_mem_jump(op):
-            self.handle_call(startpc, op, avoid_calls=avoid_calls)
+        if self.is_call(op):  # or self.is_indirect_mem_jump(op):
+            self.handle_call(op, avoid_calls=avoid_calls)
+            # TODO: split out handle_jmp
         else:
             emu.executeOpcode(op)
 
@@ -396,15 +406,6 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             else:
                 self.stepi()
         raise InstructionRangeExceededError(pc)
-
-    def addBreakpoint(self, va):
-        self._bps.add(va)
-
-    def removeBreakpoint(self, va):
-        self._bps.remove(va)
-
-    def getBreakpoints(self):
-        return list(self._bps)
 
 
 class FunctionRunnerEmulatorDriver(EmulatorDriver):
@@ -504,7 +505,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
 
                     iscall = bool(op.iflags & v_envi.IF_CALL)
                     if iscall:
-                        wentInto = self.handle_call(startpc, op, avoid_calls=func_only)
+                        wentInto = self.handle_call(op, avoid_calls=func_only)
                         if wentInto:
                             depth += 1
                     else:
