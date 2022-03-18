@@ -139,3 +139,33 @@ def test_dbg_driver_bp(pma01):
     with pytest.raises(vudrv.BreakpointHit):
         drv.run()
     assert drv.getProgramCounter() == 0x10001344
+
+
+def test_dbg_driver_until_mnem(pma01):
+    emu = pma01.getEmulator()
+    drv = vudrv.DebuggerEmulatorDriver(emu)
+
+    # .text:10001342 57                      push    edi
+    # .text:10001343 56                      push    esi             ; fdwReason
+    # .text:10001344 53                      push    ebx             ; hinstDLL
+    # .text:10001345 E8 C6 FC FF FF          call    DllMain (0x10001010)
+    # .text:1000134A 83 FE 01                cmp     esi, 1
+    drv.setProgramCounter(0x10001342)
+    with pytest.raises(vudrv.BreakpointHit):
+        drv.run_to_mnem(["call"])
+    assert drv.getProgramCounter() == 0x10001345
+
+
+def test_dbg_driver_until_va(pma01):
+    emu = pma01.getEmulator()
+    drv = vudrv.DebuggerEmulatorDriver(emu)
+
+    # .text:10001342 57                      push    edi
+    # .text:10001343 56                      push    esi             ; fdwReason
+    # .text:10001344 53                      push    ebx             ; hinstDLL
+    # .text:10001345 E8 C6 FC FF FF          call    DllMain (0x10001010)
+    # .text:1000134A 83 FE 01                cmp     esi, 1
+    drv.setProgramCounter(0x10001342)
+    with pytest.raises(vudrv.BreakpointHit):
+        drv.run_to_va(0x10001344)
+    assert drv.getProgramCounter() == 0x10001344

@@ -372,51 +372,59 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         return self.step(False)
 
     def run(self, max_instruction_count=sys.maxsize):
+        """
+        stepi until breakpoint is hit or max_instruction_count reached.
+        raises the exception in either case.
+        """
         for _ in range(max_instruction_count):
             self.stepi()
 
         raise InstructionRangeExceededError(self.getProgramCounter())
 
-    def runToCall(self, max_instruction_count=1000):
-        """stepi until call instruction"""
-        emu = self._emu
-        for _ in range(max_instruction_count):
-            pc = emu.getProgramCounter()
-            if pc in self.breakpoints:
-                raise BreakpointHit()
-            op = emu.parseOpcode(pc)
-            if self.is_call(op):
-                return
-            else:
-                self.stepi()
-        raise InstructionRangeExceededError(pc)
+    class UntilMnemonicMonitor(Monitor):
+        def __init__(self, mnems: List[str]):
+            super().__init__()
+            self.mnems = mnems
 
-    def runToReturn(self, max_instruction_count=1000):
-        """stepo until ret instruction"""
-        emu = self._emu
-        for _ in range(max_instruction_count):
-            pc = emu.getProgramCounter()
-            if pc in self.breakpoints:
-                raise BreakpointHit()
-            op = emu.parseOpcode(pc)
-            if self.is_ret(op):
-                return
-            else:
-                self.stepo()
-        raise InstructionRangeExceededError(pc)
+        def prehook(self, emu, op, pc):
+            if op.mnem in self.mnems:
+                raise BreakpointHit(pc)
 
-    def runToVa(self, va, max_instruction_count=1000):
+    def run_to_mnem(self, mnems: List[str], max_instruction_count=sys.maxsize):
+        """
+        stepi until:
+          - breakpoint is hit, or
+          - max_instruction_count reached, or
+          - given mnemonic reached (but not executed).
+        raises the exception in any case.
+        """
+        mon = self.UntilMnemonicMonitor(mnems)
+        self.add_monitor(mon)
+
+        try:
+            self.run(max_instruction_count=max_instruction_count)
+        except BreakpointHit:
+            self.remove_monitor(mon)
+            raise
+
+    def run_to_va(self, va: int, max_instruction_count=sys.maxsize):
+        """
+        stepi until:
+          - breakpoint is hit, or
+          - max_instruction_count reached, or
+          - given address reached (but not executed).
+        raises the exception in any case.
+        """
         """stepi until given address"""
-        emu = self._emu
-        for _ in range(max_instruction_count):
-            pc = emu.getProgramCounter()
-            if pc in self.breakpoints:
-                raise BreakpointHit()
-            if pc == va:
-                return
-            else:
-                self.stepi()
-        raise InstructionRangeExceededError(pc)
+        if va in self.breakpoints:
+            self.run()
+        else:
+            self.breakpoints.add(va)
+            try:
+                self.run()
+            except BreakpointHit:
+                self.breakpoints.remove(va)
+                raise
 
 
 class FunctionRunnerEmulatorDriver(EmulatorDriver):
