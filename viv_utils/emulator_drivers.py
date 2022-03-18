@@ -166,39 +166,30 @@ class EmulatorDriver(EmuHelperMixin):
     def remove_hook(self, hook):
         self._hooks.remove(hook)
 
-    def isCall(self, op):
+    @staticmethod
+    def is_call(op):
         return bool(op.iflags & v_envi.IF_CALL)
 
-    def isIndirectMemJump(self, op):
+    @staticmethod
+    def is_indirect_mem_jump(op):
         # jmp/call via thunk on x86
         # jmp/call via import on x64
         return op.mnem == "jmp" and isinstance(
             op.opers[0], (v_envi.archs.i386.disasm.i386ImmMemOper, v_envi.archs.amd64.disasm.Amd64RipRelOper)
         )
 
-    def isRet(self, op):
+    @staticmethod
+    def is_ret(op):
         return bool(op.iflags & v_envi.IF_RET)
 
-    def isHooked(self, pc, op):
-        if not self.isCall(op):
-            raise RuntimeError("not a call")
-
-        emu = self._emu
-        api = emu.getCallApi(pc)
-        rtype, rname, convname, callname, funcargs = api
-
-        return callname in emu.hooks
-
-    def doHook(self, pc, op):
+    def _handle_hook(self):
         """
-        op should be the instruction that calls this function.
-        pc should be at the start of a function.
-
         return True if a hook handled the call, False otherwise.
         if hook handled, then pc will be back at the call site,
         otherwise, pc remains where it was.
         """
         emu = self._emu
+        pc = emu.getProgramCounter()
 
         api = emu.getCallApi(pc)
         _, _, convname, callname, funcargs = api
@@ -268,7 +259,7 @@ class EmulatorDriver(EmuHelperMixin):
 
         return False
 
-    def handleCall(self, pc, op, avoid_calls=False):
+    def handle_call(self, pc, op, avoid_calls=False):
         """
         pc should be at a call instruction.
         if its an indirect call, like `call [0x401000]`, resolve the pointer first
@@ -284,11 +275,11 @@ class EmulatorDriver(EmuHelperMixin):
 
         return True if stepped into the function, False if the function is completely handled
         """
-        if not (self.isCall(op) or self.isIndirectMemJump(op)):
+        if not (self.is_call(op) or self.is_indirect_mem_jump(op)):
             raise RuntimeError("not a call or jmp call")
 
         emu = self._emu
-        is_call = self.isCall(op)
+        is_call = self.is_call(op)
 
         emu.executeOpcode(op)
         target = emu.getProgramCounter()
@@ -301,7 +292,7 @@ class EmulatorDriver(EmuHelperMixin):
             logger.debug("driver: no call convention available at 0x%x. Using stdcall as default.", target)
             callconv = emu.getCallingConvention("stdcall")
 
-        if self.doHook(target, op):
+        if self._handle_hook():
             if is_call:
                 # some hook handled the call,
                 # so make sure PC is at the next instruction
@@ -347,8 +338,8 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         for mon in self._monitors:
             mon.prehook(emu, op, startpc)
 
-        if self.isCall(op) or self.isIndirectMemJump(op):
-            self.handleCall(startpc, op, avoid_calls=avoid_calls)
+        if self.is_call(op) or self.is_indirect_mem_jump(op):
+            self.handle_call(startpc, op, avoid_calls=avoid_calls)
         else:
             emu.executeOpcode(op)
 
@@ -371,7 +362,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             if pc in self._bps:
                 raise BreakpointHit()
             op = emu.parseOpcode(pc)
-            if self.isCall(op):
+            if self.is_call(op):
                 return
             else:
                 self.stepi()
@@ -385,7 +376,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             if pc in self._bps:
                 raise BreakpointHit()
             op = emu.parseOpcode(pc)
-            if self.isRet(op):
+            if self.is_ret(op):
                 return
             else:
                 self.stepo()
@@ -511,7 +502,7 @@ class FunctionRunnerEmulatorDriver(EmulatorDriver):
 
                     iscall = bool(op.iflags & v_envi.IF_CALL)
                     if iscall:
-                        wentInto = self.handleCall(startpc, op, avoid_calls=func_only)
+                        wentInto = self.handle_call(startpc, op, avoid_calls=func_only)
                         if wentInto:
                             depth += 1
                     else:
