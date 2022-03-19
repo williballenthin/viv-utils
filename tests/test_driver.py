@@ -12,6 +12,12 @@ class LoggingMonitor(vudrv.Monitor):
     def prehook(self, emu, op, startpc):
         print("emu: 0x%x %s" % (startpc, op))
 
+    def preblock(self, emu, blockstart):
+        print("emu: block: start: 0x%x" % (blockstart))
+
+    def postblock(self, emu, blockstart, blockend):
+        print("emu: block: 0x%x - 0x%x" % (blockstart, blockend))
+
 
 class CoverageMonitor(vudrv.Monitor):
     """capture the emulated addresses"""
@@ -241,3 +247,64 @@ def test_dbg_driver_until_va(pma01):
     with pytest.raises(vudrv.BreakpointHit):
         drv.run_to_va(0x10001344)
     assert drv.getProgramCounter() == 0x10001344
+
+
+def test_fc_driver(pma01):
+    emu = pma01.getEmulator()
+    drv = vudrv.FullCoverageEmulatorDriver(emu)
+    cov = CoverageMonitor()
+    drv.add_monitor(cov)
+
+    drv.run(0x10001010)
+
+    # each instruction should have been emulated exactly once.
+    assert list(set(cov.addresses.values())) == [1]
+
+    # there's a call to __alloca_probe,
+    # however, we should not have emulated into its body.
+    #
+    # .text:10001010 B8 F8 11 00 00          mov     eax, 11F8h
+    # .text:10001015 E8 06 02 00 00          call    __alloca_probe == 0x10001220
+    assert 0x10001220 not in cov.addresses
+
+    # these are a selection of addresses from the function
+    # pulled from IDA manually.
+    for va in [
+        0x10001010,
+        0x10001033,
+        0x10001086,
+        0x100010E9,
+        0x100011D0,
+        0x100011DB,
+        0x100011E2,
+        0x100011E8,
+        0x100011F7,
+    ]:
+        assert va in cov.addresses
+
+
+def test_fc_driver_rep(pma01):
+    class LocalMonitor(vudrv.Monitor):
+        """capture the value of ecx at 0x100010F7"""
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.ecx = -1
+
+        def prehook(self, emu, op, startpc):
+            if startpc == 0x100010F7:
+                self.ecx = emu.getRegisterByName("ecx")
+
+    emu = pma01.getEmulator()
+    drv = vudrv.FullCoverageEmulatorDriver(emu)
+    mon = LocalMonitor()
+    drv.add_monitor(mon)
+
+    drv.run(0x10001010, repmax=0x100)
+    assert mon.ecx == len("hello")
+
+    drv.run(0x10001010, repmax=10)
+    assert mon.ecx == len("hello")
+
+    drv.run(0x10001010, repmax=1)
+    assert mon.ecx == 1

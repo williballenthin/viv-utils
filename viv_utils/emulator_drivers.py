@@ -1,14 +1,15 @@
 import sys
 import logging
+import collections
 from typing import List, Tuple, Callable, Optional
 
 import envi as v_envi
 import envi.exc
 import vivisect
 import envi.memory as v_mem
-import visgraph.pathcore as vg_path
+import vivisect.const
+import envi.archs.i386.disasm
 from typing_extensions import TypeAlias
-from envi.archs.i386.disasm import PREFIX_REP
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,16 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor):
         pass
 
     def posthook(self, emu, op, endpc):
+        pass
+
+    def preblock(self, emu, blockstart):
+        # called when entering a newly recognized basic block.
+        # the block analysis here is not guaranteed to be perfect,
+        # but should work fairly well during FullCoverage emulation.
+        pass
+
+    def postblock(self, emu, blockstart, blockend):
+        # called when entering a leaving recognized basic block.
         pass
 
     def apicall(self, emu, api, argv):
@@ -503,155 +514,247 @@ class DebuggerEmulatorDriver(EmulatorDriver):
                 raise
 
 
-class FunctionRunnerEmulatorDriver(EmulatorDriver):
+class FullCoverageEmulatorDriver(EmulatorDriver):
     """
-    this is a EmulatorDriver that supports emulating all the instructions
-      in a function.
-    it explores all code paths by taking both branches.
+    an emulator that attempts to explore all code paths from a given entry.
+    that is, it explores all branches encountered (though it doesn't follow calls).
+    it should emulate each instruction once (unless REP prefix, and limited to repmax iterations).
 
-    the .runFunction() implementation is essentially the same as emu.runFunction()
+    use a monitor to receive callbacks describing the found instructions and blocks.
     """
 
-    def __init__(self, emu):
-        super(FunctionRunnerEmulatorDriver, self).__init__(emu)
-        self.path = self.newCodePathNode()
-        self.curpath = self.path
+    def is_table(self, op, xrefs):
+        if not self.vw.getLocation(op.va):
+            return False
+        if not xrefs:
+            return False
 
-    def newCodePathNode(self, parent=None, bva=None):
-        """
-        NOTE: Right now, this is only called from the actual branch state which
-        needs it.  it must stay that way for now (register context is being copied
-        for symbolic emulator...)
-        """
-        props = {
-            "bva": bva,  # the entry virtual address for this branch
-            "valist": [],  # the virtual addresses in this node in order
-            "calllog": [],  # FIXME is this even used?
-            "readlog": [],  # a log of all memory reads from this block
-            "writelog": [],  # a log of all memory writes from this block
-        }
-        return vg_path.newPathNode(parent=parent, **props)
+        for bto, bflags in op.getBranches(emu=None):
+            if bflags & envi.BR_TABLE:
+                return True
 
-    def _runFunction(self, funcva, stopva=None, maxhit=None, maxloop=None, maxrep=None, strictops=True, func_only=True):
-        """
-        :param func_only: is this emulator meant to stay in one function scope?
-        :param strictops: should we bail on emulation if unsupported instruction encountered
-        """
-        vg_path.setNodeProp(self.curpath, "bva", funcva)
+        return False
 
-        hits = {}
-        rephits = {}
-        todo = [
-            (funcva, self.getEmuSnap(), self.path),
-        ]
+    @staticmethod
+    def is_conditional(op):
+        if not (op.iflags & envi.IF_BRANCH):
+            return False
+        return op.iflags & envi.IF_COND
+
+    def get_branches(self, op):
         emu = self._emu
-        vw = self._emu.vw  # Save a dereference many many times
-        depth = 0
-        op = None
+        vw = emu.vw
+        ret = []
 
-        while len(todo) > 0:
-            va, esnap, self.curpath = todo.pop()
-            self.setEmuSnap(esnap)
-            emu.setProgramCounter(va)
+        if not (op.iflags & envi.IF_BRANCH):
+            return []
 
-            # Check if we are beyond our loop max...
-            if maxloop != None:
-                lcount = vg_path.getPathLoopCount(self.curpath, "bva", va)
-                if lcount > maxloop:
+        xrefs = vw.getXrefsFrom(op.va, rtype=vivisect.const.REF_CODE)
+        if self.is_table(op, xrefs):
+            for xrfrom, xrto, xrtype, xrflags in xrefs:
+                ret.append(xrto)
+            return ret
+
+        xrefs = op.getBranches(emu=emu)
+        if not xrefs:
+            return []
+
+        if self.is_conditional(op):
+            for bto, bflags in xrefs:
+                if not bto:
                     continue
+                ret.append(bto)
+            return ret
+
+        # we've hit a branch that doesn't go anywhere.
+        # probably a switchcase we don't handle well.
+        for bto, bflags in xrefs:
+            if bflags & envi.BR_DEREF:
+                continue
+
+            ret.append(bto)
+
+        return ret
+
+    def step(self):
+        """
+        emulate one instruction.
+        return :
+          - whether the instruction falls through, and
+          - the list of branch target to which execution may flow from this instruction.
+        """
+        emu = self._emu
+
+        startpc = emu.getProgramCounter()
+        op = emu.parseOpcode(startpc)
+
+        for mon in self._monitors:
+            mon.prehook(emu, op, startpc)
+
+        branches = self.get_branches(op)
+
+        if self.is_call(op):
+            skipped = not self.handle_call(op, avoid_calls=True)
+        elif self.is_jmp(op):
+            skipped = not self.handle_jmp(op, avoid_calls=True)
+        else:
+            emu.executeOpcode(op)
+            skipped = False
+
+        endpc = emu.getProgramCounter()
+
+        for mon in self._monitors:
+            mon.posthook(emu, op, endpc)
+
+        does_fallthrough = not (op.iflags & envi.IF_NOFALL)
+
+        if skipped:
+            return does_fallthrough, []
+        else:
+            return does_fallthrough, branches
+
+    def run(self, va: int, repmax=0x100):
+        # explore from the given address, emulating all encountered instructions once.
+        #
+        # use a queue of emulator snaps, one for each block that still needs to be explored.
+        # use a set to track the instructions already emulated.
+        #
+        # when emulating an instruction, here are the cases:
+        #  - instruction not supported: skip to next one
+        #  - invalid instruction: stop emulation
+        #  - branching instruction: stop emulation, add snap for each branch
+        #  - fallthrough to new instruction: step to next instruction
+        #  - fallthrough to seen instruction: stop emulation
+        #  - no fallthrough (like ret): stop emulation
+        self.setEmuOpt("i386:repmax", repmax)
+
+        emu = self._emu
+        emu.setProgramCounter(va)
+
+        # queue of emulator snapshots to explore
+        q = collections.deque([emu.getEmuSnap()])
+
+        # set of branch targets that have already been explored.
+        seen = set()
+
+        while q:
+            snap = q.popleft()
+
+            emu.setEmuSnap(snap)
+            blockstart = emu.getProgramCounter()
+
+            if blockstart in seen:
+                # this block has already been explored,
+                # don't do duplicate work.
+                continue
+
+            seen.add(blockstart)
+
+            for mon in self._monitors:
+                mon.preblock(self, blockstart)
 
             while True:
-                startpc = emu.getProgramCounter()
+                # the address of the instruction we're about to emulate.
+                lastpc = emu.getProgramCounter()
+                seen.add(lastpc)
 
-                if not vw.isValidPointer(startpc):
-                    break
-
-                if startpc == stopva:
-                    return
-
-                # If we ran out of path (branches that went
-                # somewhere that we couldn't follow?
-                if self.curpath == None:
-                    break
+                # if lastpc == 0x1000104D:
+                #    from IPython import embed; embed()
+                #    return
 
                 try:
-                    op = emu.parseOpcode(startpc)
+                    does_fallthrough, branches = self.step()
+                except v_envi.UnsupportedInstruction:
+                    # don't know how to emulate the instruction.
+                    # skip it and hope we can fallthrough and keep emulating.
+                    op = emu.parseOpcode(lastpc)
+                    emu.setProgramCounter(lastpc + op.size)
 
-                    if op.prefixes & PREFIX_REP and maxrep != None:
-                        # execute same instruction with `rep` prefix up to maxrep times
-                        h = rephits.get(startpc, 0)
-                        h += 1
-                        if h > maxrep:
-                            break
-                        rephits[startpc] = h
-                    elif maxhit != None:
-                        # Check straight hit count for all other instructions...
-                        h = hits.get(startpc, 0)
-                        h += 1
-                        if h > maxhit:
-                            break
-                        hits[startpc] = h
+                    logger.debug(
+                        "driver: run_function: skipping unsupported instruction: 0x%x %s",
+                        lastpc,
+                        op.mnem,
+                    )
 
-                    nextpc = startpc + len(op)
-                    self.op = op
+                    continue
+                except v_envi.InvalidInstruction:
+                    # don't know how to decode the instruction.
+                    # so we don't know its length, and there's nothing we can do.
+
+                    logger.debug(
+                        "driver: run_function: invalid instruction: 0x%x",
+                        lastpc,
+                    )
+
+                    blockend = lastpc
+                    for mon in self._monitors:
+                        mon.postblock(self, blockstart, blockend)
+
+                    # stop emulating, and go to next block in the queue.
+                    break
+
+                if branches:
+                    blockend = lastpc
+
+                    # other case: branching instruction.
+                    # enqueue all the branch options for exploration.
+                    for branch in branches:
+                        if branch in seen:
+                            continue
+
+                        emu.setProgramCounter(branch)
+                        q.append(emu.getEmuSnap())
 
                     for mon in self._monitors:
-                        mon.prehook(emu, op, startpc)
+                        mon.postblock(self, blockstart, blockend)
 
-                    iscall = bool(op.iflags & v_envi.IF_CALL)
-                    if iscall:
-                        wentInto = self.handle_call(op, avoid_calls=func_only)
-                        if wentInto:
-                            depth += 1
-                    else:
-                        emu.executeOpcode(op)
+                    # stop emulating this basic block,
+                    # go to next block in the queue.
+                    break
 
-                    vg_path.getNodeProp(self.curpath, "valist").append(startpc)
-                    endpc = emu.getProgramCounter()
+                elif does_fallthrough:
+                    # common case: middle of BB, keep stepping.
 
-                    for mon in self._monitors:
-                        mon.posthook(emu, op, endpc)
+                    nextpc = emu.getProgramCounter()
+                    if nextpc in seen:
 
-                    if not iscall:
-                        # If it wasn't a call, check for branches, if so, add them to
-                        # the todo list and go around again...
-                        blist = emu.checkBranches(startpc, endpc, op)
-                        if len(blist) > 0:
-                            # pc in the snap will be wrong, but over-ridden at restore
-                            esnap = self.getEmuSnap()
-                            for bva, bpath in blist:
-                                todo.append((bva, esnap, bpath))
-                            break
+                        if nextpc == lastpc:
+                            # candidates:
+                            #   - jump to self
+                            #   - REP instruction
+                            #   - ???
+                            op = emu.parseOpcode(lastpc)
+                            if op.prefixes & envi.archs.i386.disasm.PREFIX_REP:
+                                # its a REP instruction,
+                                # do this max_rep times,
+                                # then be done.
+                                # TODO
+                                continue
 
-                    if op.iflags & v_envi.IF_RET:
-                        vg_path.setNodeProp(self.curpath, "cleanret", True)
-                        if depth == 0:
-                            break
-                        else:
-                            depth -= 1
+                            # other cases: like a new basic block
+                            # so fallthrough and break.
 
-                # If we enounter a procedure exit, it doesn't
-                # matter what PC is, we're done here.
-                except v_envi.UnsupportedInstruction as e:
-                    if strictops:
+                        # the next instruction has already been explored.
+                        # must be an overlapping block.
+                        # stop emulating and go to next block in queue.
+                        blockend = lastpc
+
+                        for mon in self._monitors:
+                            mon.postblock(self, blockstart, blockend)
+
                         break
                     else:
-                        logger.debug(
-                            "driver: runFunction continuing after unsupported instruction: 0x%08x %s",
-                            e.op.va,
-                            e.op.mnem,
-                        )
-                        emu.setProgramCounter(e.op.va + e.op.size)
-                except StopEmulation:
-                    raise
-                except Exception as e:
-                    logger.warning("driver: error during emulation of function: %s", e)
-                    for mon in self._monitors:
-                        mon.logAnomaly(emu, startpc, str(e))
-                    break  # If we exc during execution, this branch is dead.
+                        # next instruction is not yet explored,
+                        # keep stepping.
+                        continue
 
-    def runFunction(self, funcva, stopva=None, maxhit=None, maxloop=None, maxrep=None, strictops=True, func_only=True):
-        try:
-            self._runFunction(funcva, stopva, maxhit, maxloop, maxrep, strictops, func_only)
-        except StopEmulation:
-            return
+                else:
+                    # uncommon case: no fallthrough, like ret.
+                    # stop emulating this basic block.
+                    # go to next block in the queue.
+                    blockend = lastpc
+
+                    for mon in self._monitors:
+                        mon.postblock(self, blockstart, blockend)
+
+                    break
