@@ -506,7 +506,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         """
         """stepi until given address"""
         if va in self.breakpoints:
-            self.run()
+            self.run(max_instruction_count=max_instruction_count)
         else:
             self.breakpoints.add(va)
             try:
