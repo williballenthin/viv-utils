@@ -54,9 +54,3 @@ setuptools.setup(
         "Programming Language :: Python :: 3",
     ],
 )
-
-
-# TODO:
-#  - tests
-#  - black
-#  - isort
