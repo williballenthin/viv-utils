@@ -285,26 +285,82 @@ def test_fc_driver(pma01):
 
 def test_fc_driver_rep(pma01):
     class LocalMonitor(vudrv.Monitor):
-        """capture the value of ecx at 0x100010F7"""
+        """capture the value of ecx at 0x100010FA"""
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.ecx = -1
 
         def prehook(self, emu, op, startpc):
-            if startpc == 0x100010F7:
+            if startpc == 0x100010FA:
                 self.ecx = emu.getRegisterByName("ecx")
 
+    REPMAX = 0x70
     emu = pma01.getEmulator()
-    drv = vudrv.FullCoverageEmulatorDriver(emu)
+    drv = vudrv.FullCoverageEmulatorDriver(emu, repmax=REPMAX)
     mon = LocalMonitor()
     drv.add_monitor(mon)
 
-    drv.run(0x10001010, repmax=0x100)
-    assert mon.ecx == len("hello")
+    drv.run(0x10001010)
 
-    drv.run(0x10001010, repmax=10)
-    assert mon.ecx == len("hello")
+    # should be strlen("hello")
+    # however viv doesn't correctly handle repnz with a repmax option.
+    # see: https://github.com/vivisect/vivisect/pull/513
+    #
+    # instead we have 0xFFFFFFFF - repmax - strlen("hello")
+    assert mon.ecx in (
+        # correct answer
+        len("hello"),
+        # buggy viv answer
+        0xFFFFFFFF - REPMAX + len("hello"),
+    )
 
-    drv.run(0x10001010, repmax=1)
-    assert mon.ecx == 1
+
+def test_dbg_driver_rep(pma01):
+    REPMAX = 0x70
+
+    emu = pma01.getEmulator()
+    drv = vudrv.DebuggerEmulatorDriver(emu, repmax=REPMAX)
+
+    # .text:100010E9 BF 20 60 02 10          mov     edi, offset aHello ; "hello"
+    # .text:100010EE 83 C9 FF                or      ecx, 0FFFFFFFFh
+    # .text:100010F1 33 C0                   xor     eax, eax
+    # .text:100010F3 6A 00                   push    0
+    # .text:100010F5 F2 AE                   repne scasb
+    # .text:100010F7 F7 D1                   not     ecx
+    # .text:100010F9 49                      dec     ecx
+    # .text:100010FA 51                      push    ecx
+    drv.setProgramCounter(0x100010E9)
+
+    drv.stepi()
+    drv.stepi()
+    drv.stepi()
+    drv.stepi()
+    assert drv.getProgramCounter() == 0x100010F5
+    assert drv.getRegisterByName("edi") == 0x10026020
+    assert drv.readString(0x10026020) == "hello"
+    assert drv.getRegisterByName("eax") == 0x0
+    assert drv.getRegisterByName("ecx") == 0xFFFFFFFF
+
+    drv.stepi()
+    # should be 0xFFFFFFFF - strlen("hello")
+    # however viv doesn't correctly handle repnz with a repmax option.
+    # see: https://github.com/vivisect/vivisect/pull/513
+    #
+    # instead we have repmax - strlen("hello")
+    assert drv.getRegisterByName("ecx") in (
+        # correct answer
+        0xFFFFFFFF - len("hello\x00"),
+        # buggy viv answer
+        REPMAX - len("hello\x00"),
+    )
+
+    drv.stepi()
+    drv.stepi()
+
+    assert drv.getRegisterByName("ecx") in (
+        # correct answer
+        len("hello"),
+        # buggy viv answer
+        0xFFFFFFFF - REPMAX + len("hello"),
+    )

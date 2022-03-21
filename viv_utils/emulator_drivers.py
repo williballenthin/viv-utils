@@ -421,8 +421,10 @@ class DebuggerEmulatorDriver(EmulatorDriver):
      when encountering the address, a `BreakpointHit` exception is raised.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, repmax=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if repmax is not None:
+            self.setEmuOpt("i386:repmax", repmax)
 
         # this is a public member.
         # add and remove breakpoints by manipulating this set.
@@ -523,6 +525,11 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
     use a monitor to receive callbacks describing the found instructions and blocks.
     """
 
+    def __init__(self, *args, repmax=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if repmax is not None:
+            self.setEmuOpt("i386:repmax", repmax)
+
     def is_table(self, op, xrefs):
         if not self.vw.getLocation(op.va):
             return False
@@ -613,7 +620,7 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
         else:
             return does_fallthrough, branches
 
-    def run(self, va: int, repmax=0x100):
+    def run(self, va: int):
         # explore from the given address, emulating all encountered instructions once.
         #
         # use a queue of emulator snaps, one for each block that still needs to be explored.
@@ -626,8 +633,6 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
         #  - fallthrough to new instruction: step to next instruction
         #  - fallthrough to seen instruction: stop emulation
         #  - no fallthrough (like ret): stop emulation
-        self.setEmuOpt("i386:repmax", repmax)
-
         emu = self._emu
         emu.setProgramCounter(va)
 
