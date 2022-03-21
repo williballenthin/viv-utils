@@ -42,10 +42,7 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *,cover
-<<<<<<< HEAD
-=======
 .hypothesis/
->>>>>>> 5e221b7233993e6b9c661f6c6b37c733cddd4ea9
 
 # Translations
 *.mo
@@ -59,10 +56,8 @@ docs/_build/
 
 # PyBuilder
 target/
-<<<<<<< HEAD
-=======
 
 #Ipython Notebook
 .ipynb_checkpoints
->>>>>>> 5e221b7233993e6b9c661f6c6b37c733cddd4ea9
 .idea
+.direnv
