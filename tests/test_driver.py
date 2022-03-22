@@ -413,3 +413,4 @@ def test_dbg_driver_maxhit(pma01):
     # first address in the inner loop
     # which will be hit twice, and therefore, break.
     assert e.value.va == 0x1000122C
+    assert e.value.reason == "max_hit"
