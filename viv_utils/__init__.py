@@ -457,6 +457,11 @@ class CFG(object):
         self.vw = func.vw
         self.func = func
         self.bb_by_start = {bb.va: bb for bb in self.func.basic_blocks}
+        if self.func.va not in self.bb_by_start:
+            # particularly when dealing with junk code,
+            # the address that we think starts a function may not,
+            # such as when the given address falls in the middle of a basic block.
+            raise ValueError("function at 0x%x not recognized" % (self.func.va))
 
         self.bb_by_end = {}
         for bb in self.func.basic_blocks:
@@ -474,6 +479,9 @@ class CFG(object):
 
         self._succ_cache = {}
         self._pred_cache = {}
+        if len(self.bb_by_start) != len(self.bb_by_end):
+            # there's probably junk code encountered
+            logger.warning("cfg: incomplete control flow graph")
 
     def get_successor_basic_blocks(self, bb):
         if bb.va in self._succ_cache:

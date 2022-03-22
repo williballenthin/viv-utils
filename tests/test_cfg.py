@@ -46,3 +46,8 @@ def test_cfg(pma01):
     assert int(tail) == 0x100011E8
 
     assert len(list(cfg.get_predecessor_basic_blocks(tail))) == 4
+
+
+def test_bad_cfg(pma01):
+    with pytest.raises(ValueError):
+        _ = viv_utils.CFG(viv_utils.Function(pma01, 0x10002000))
