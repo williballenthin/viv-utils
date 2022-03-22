@@ -328,7 +328,7 @@ def saveWorkspaceToBytes(vw):
                 return f.read()
         finally:
             try:
-                os.rm(temp_path)
+                os.rmdir(temp_path)
             except Exception:
                 pass
     finally:
@@ -349,7 +349,7 @@ def loadWorkspaceFromBytes(vw, buf):
         return vw
     finally:
         try:
-            os.rm(temp_path)
+            os.rmdir(temp_path)
         except Exception:
             pass
 
@@ -439,7 +439,10 @@ def get_all_xrefs_to(vw, va):
     for xref in vw.getXrefsTo(va):
         yield xref
 
-    op = get_prev_opcode(vw, va)
+    try:
+        op = get_prev_opcode(vw, va)
+    except ValueError:
+        return
 
     for tova, bflags in op.getBranches():
         if tova == va:
