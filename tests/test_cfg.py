@@ -37,7 +37,10 @@ def test_cfg(pma01):
     f = viv_utils.Function(pma01, 0x10001010)
     cfg = viv_utils.CFG(f)
 
-    assert int(cfg.get_root_basic_block()) == 0x10001010
+    roots = list(cfg.get_root_basic_blocks())
+    assert len(roots) == 1
+    root = roots[0]
+    assert int(root) == 0x10001010
 
     tails = list(cfg.get_leaf_basic_blocks())
     assert len(tails) == 1

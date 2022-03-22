@@ -528,8 +528,10 @@ class CFG(object):
 
         self._pred_cache[bb.va] = predecessors
 
-    def get_root_basic_block(self):
-        return self.bb_by_start[self.func.va]
+    def get_root_basic_blocks(self) -> Iterator[BasicBlock]:
+        for bb in self.func.basic_blocks:
+            if empty(self.get_predecessor_basic_blocks(bb)):
+                yield bb
 
     def get_leaf_basic_blocks(self):
         for bb in self.func.basic_blocks:
