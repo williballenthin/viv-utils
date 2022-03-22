@@ -4,7 +4,7 @@ import struct
 import hashlib
 import logging
 import tempfile
-from typing import List
+from typing import Any, Dict, List, Tuple, Iterator
 
 import envi
 import funcy
@@ -13,6 +13,7 @@ import intervaltree
 import pkg_resources
 import vivisect.const
 
+from viv_utils.types import *
 from viv_utils.idaloader import loadWorkspaceFromIdb
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ class IncompatibleVivVersion(ValueError):
     pass
 
 
-def getVwFirstMeta(vw):
+def getVwFirstMeta(vw: Workspace) -> Dict[str, Any]:
     # return the first set of metadata from the vw.
     # this is for the first loaded file.
     # if other files have been added to the vw,
@@ -33,7 +34,7 @@ def getVwFirstMeta(vw):
     return list(vw.filemeta.values())[0]
 
 
-def getVwSampleMd5(vw):
+def getVwSampleMd5(vw: Workspace) -> str:
     return getVwFirstMeta(vw)["md5sum"]
 
 
@@ -48,7 +49,7 @@ def getVwSampleMd5(vw):
 # to minimize unexpected dependencies this check is ignored if a package does not embed the vivisect version
 
 
-def getVivisectLibraryVersion():
+def getVivisectLibraryVersion() -> str:
     # ref: https://stackoverflow.com/questions/710609/checking-a-python-module-version-at-runtime
     try:
         return pkg_resources.get_distribution("vivisect").version
@@ -57,11 +58,11 @@ def getVivisectLibraryVersion():
     return "N/A"
 
 
-def setVwVivisectLibraryVersion(vw):
+def setVwVivisectLibraryVersion(vw: Workspace):
     vw.setMeta("version", getVivisectLibraryVersion())
 
 
-def getVwVivisectLibraryVersion(vw):
+def getVwVivisectLibraryVersion(vw) -> str:
     return vw.getMeta("version")
 
 
@@ -74,7 +75,7 @@ def assertVwMatchesVivisectLibrary(vw):
         logger.debug("vivisect version match: %s", wanted)
 
 
-def loadWorkspaceFromViv(vw, viv_file):
+def loadWorkspaceFromViv(vw: Workspace, viv_file):
     if sys.version_info >= (3, 0):
         try:
             vw.loadWorkspace(viv_file)
@@ -87,13 +88,13 @@ def loadWorkspaceFromViv(vw, viv_file):
         vw.loadWorkspace(viv_file)
 
 
-def getWorkspace(fp: str, analyze=True, reanalyze=False, verbose=False, should_save=True):
+def getWorkspace(fp: str, analyze=True, reanalyze=False, verbose=False, should_save=True) -> Workspace:
     """
     For a file path return a workspace, it will create one if the extension
     is not .viv, otherwise it will load the existing one. Reanalyze will cause
     it to create and save a new one.
     """
-    vw = vivisect.VivWorkspace()
+    vw = Workspace()
     vw.verbose = verbose
     # this is pretty insane, but simply prop assignment doesn't work.
     vw.config.getSubConfig("viv").getSubConfig("parsers").getSubConfig("pe")["loadresources"] = True
@@ -136,7 +137,7 @@ def get_function_name(vw, va: int) -> str:
 
 
 class Function:
-    def __init__(self, vw, va: int):
+    def __init__(self, vw: Workspace, va: int):
         super(Function, self).__init__()
         self.vw = vw
         self.va = va
@@ -166,7 +167,7 @@ class Function:
 
 
 class BasicBlock:
-    def __init__(self, vw, va: int, size: int, fva: int):
+    def __init__(self, vw: Workspace, va: int, size: int, fva: int):
         super(BasicBlock, self).__init__()
         self.vw = vw
         self.va = va
@@ -215,7 +216,7 @@ def one(s):
 class InstructionFunctionIndex:
     """Index from VA to containing function VA"""
 
-    def __init__(self, vw):
+    def __init__(self, vw: Workspace):
         super(InstructionFunctionIndex, self).__init__()
         self.vw = vw
         self._index = intervaltree.IntervalTree()
@@ -236,21 +237,23 @@ class InstructionFunctionIndex:
         return v.data
 
 
-def getFunctionName(vw, fva):
+def getFunctionName(vw: Workspace, fva: Address):
     ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(fva)
     return func_name
 
 
-def getFunctionCallingConvention(vw, fva):
+def getFunctionCallingConvention(vw: Workspace, fva: Address):
     ret_type, ret_name, call_conv, func_name, args = vw.getFunctionApi(fva)
     return call_conv
 
 
-def getFunctionArgs(vw, fva):
+def getFunctionArgs(vw: Workspace, fva: Address):
     return vw.getFunctionArgs(fva)
 
 
-def getShellcodeWorkspaceFromFile(filepath, arch, base=SHELLCODE_BASE, entry_point=0, analyze=True, should_save=False):
+def getShellcodeWorkspaceFromFile(
+    filepath: str, arch: str, base: Address = SHELLCODE_BASE, entry_point: Address = 0, analyze=True, should_save=False
+) -> Workspace:
     with open(filepath, "rb") as f:
         sample_bytes = f.read()
 
@@ -264,24 +267,33 @@ def getShellcodeWorkspaceFromFile(filepath, arch, base=SHELLCODE_BASE, entry_poi
 
 
 def getShellcodeWorkspace(
-    buf, arch, base=SHELLCODE_BASE, entry_point=0, analyze=True, should_save=False, save_path=None
-):
+    buf: bytes,
+    arch: str,
+    base: Address = SHELLCODE_BASE,
+    entry_point: Address = 0,
+    analyze=True,
+    should_save=False,
+    save_path=None,
+) -> Workspace:
     """
     Load shellcode into memory object and generate vivisect workspace.
     Thanks to Tom for most of the code.
-    :param buf: shellcode buffer bytes
-    :param arch: architecture string
-    :param base: base address where shellcode will be loaded
-    :param entry_point: entry point of shellcode, relative to base
-    :param analyze: analyze workspace or otherwise leave it to caller
-    :param should_save: save workspace to disk
-    :param save_path: path to save workspace to
-    :return: vivisect workspace
+
+    Arguments:
+      buf: shellcode buffer bytes
+      arch: architecture string
+      base: base address where shellcode will be loaded
+      entry_point: entry point of shellcode, relative to base
+      analyze: analyze workspace or otherwise leave it to caller
+      should_save: save workspace to disk
+      save_path: path to save workspace to
+
+    Returns: vivisect workspace
     """
     md5 = hashlib.md5()
     md5.update(buf)
 
-    vw = vivisect.VivWorkspace()
+    vw = Workspace()
     vw.addFile("shellcode", base, md5.hexdigest())
     vw.setMeta("Architecture", arch)
     vw.setMeta("Platform", "windows")
@@ -310,7 +322,7 @@ def getShellcodeWorkspace(
     return vw
 
 
-def saveWorkspaceToBytes(vw):
+def saveWorkspaceToBytes(vw: Workspace) -> bytes:
     """
     serialize a vivisect workspace to a Python string/bytes.
 
@@ -335,7 +347,7 @@ def saveWorkspaceToBytes(vw):
         vw.setMeta("StorageName", orig_storage)
 
 
-def loadWorkspaceFromBytes(vw, buf):
+def loadWorkspaceFromBytes(vw: Workspace, buf: bytes):
     """
     deserialize a vivisect workspace from a Python string/bytes.
     """
@@ -354,12 +366,12 @@ def loadWorkspaceFromBytes(vw, buf):
             pass
 
 
-def getWorkspaceFromBytes(buf, analyze=True):
+def getWorkspaceFromBytes(buf: bytes, analyze=True) -> Workspace:
     """
     create a new vivisect workspace and load it from a
       Python string/bytes.
     """
-    vw = vivisect.VivWorkspace()
+    vw = Workspace()
     vw.verbose = True
     vw.config.viv.parsers.pe.nx = True
     loadWorkspaceFromBytes(vw, buf)
@@ -370,11 +382,11 @@ def getWorkspaceFromBytes(buf, analyze=True):
     return vw
 
 
-def getWorkspaceFromFile(filepath, analyze=True):
+def getWorkspaceFromFile(filepath: str, analyze=True) -> Workspace:
     """
     deserialize a file into a new vivisect workspace.
     """
-    vw = vivisect.VivWorkspace()
+    vw = Workspace()
     vw.verbose = True
     vw.config.viv.parsers.pe.nx = True
     vw.loadFromFile(filepath)
@@ -385,7 +397,7 @@ def getWorkspaceFromFile(filepath, analyze=True):
     return vw
 
 
-def get_prev_loc(vw, va):
+def get_prev_loc(vw: Workspace, va: Address):
     this_item = vw.getLocation(va)
     if this_item is None:
         # no location at the given address,
@@ -396,12 +408,12 @@ def get_prev_loc(vw, va):
         prev_item = vw.getLocation(this_va - 1)
 
     if prev_item is None:
-        raise RuntimeError("failed to find prev location for va: %x" % va)
+        raise ValueError("failed to find prev location for va: %x" % va)
 
     return prev_item
 
 
-def get_prev_opcode(vw, va):
+def get_prev_opcode(vw: Workspace, va: Address):
     lva, lsize, ltype, linfo = get_prev_loc(vw, va)
     if ltype != vivisect.const.LOC_OP:
         raise RuntimeError("failed to find prev instruction for va: %x" % va)
@@ -415,7 +427,7 @@ def get_prev_opcode(vw, va):
     return op
 
 
-def get_all_xrefs_from(vw, va):
+def get_all_xrefs_from(vw: Workspace, va: Address):
     """
     get all xrefs, including fallthrough instructions, from this address.
 
@@ -429,7 +441,7 @@ def get_all_xrefs_from(vw, va):
         yield (va, tova, vivisect.const.REF_CODE, bflags)
 
 
-def get_all_xrefs_to(vw, va):
+def get_all_xrefs_to(vw: Workspace, va: Address):
     """
     get all xrefs, including fallthrough instructions, to this address.
 
@@ -449,14 +461,14 @@ def get_all_xrefs_to(vw, va):
             yield (op.va, va, vivisect.const.REF_CODE, bflags)
 
 
-def empty(s):
+def empty(s) -> bool:
     for c in s:
         return False
     return True
 
 
 class CFG(object):
-    def __init__(self, func):
+    def __init__(self, func: Function):
         self.vw = func.vw
         self.func = func
         self.bb_by_start = {bb.va: bb for bb in self.func.basic_blocks}
@@ -480,13 +492,14 @@ class CFG(object):
                 # we're dealing with junk. don't index that BB.
                 continue
 
-        self._succ_cache = {}
-        self._pred_cache = {}
         if len(self.bb_by_start) != len(self.bb_by_end):
             # there's probably junk code encountered
             logger.warning("cfg: incomplete control flow graph")
 
-    def get_successor_basic_blocks(self, bb):
+        self._succ_cache: Dict[Address, List[BasicBlock]] = {}
+        self._pred_cache: Dict[Address, List[BasicBlock]] = {}
+
+    def get_successor_basic_blocks(self, bb: BasicBlock) -> Iterator[BasicBlock]:
         if bb.va in self._succ_cache:
             for nbb in self._succ_cache[bb.va]:
                 yield nbb
@@ -514,7 +527,7 @@ class CFG(object):
 
         self._succ_cache[bb.va] = successors
 
-    def get_predecessor_basic_blocks(self, bb):
+    def get_predecessor_basic_blocks(self, bb: BasicBlock) -> Iterator[BasicBlock]:
         if bb.va in self._pred_cache:
             for nbb in self._pred_cache[bb.va]:
                 yield nbb
@@ -536,13 +549,13 @@ class CFG(object):
             if empty(self.get_predecessor_basic_blocks(bb)):
                 yield bb
 
-    def get_leaf_basic_blocks(self):
+    def get_leaf_basic_blocks(self) -> Iterator[BasicBlock]:
         for bb in self.func.basic_blocks:
             if empty(self.get_successor_basic_blocks(bb)):
                 yield bb
 
 
-def get_strings(vw):
+def get_strings(vw: Workspace) -> Iterator[Tuple[Address, str]]:
     """
     enumerate the strings in the given vivisect workspace.
 
@@ -566,7 +579,7 @@ def get_strings(vw):
             continue
 
 
-def is_valid_address(vw, va):
+def is_valid_address(vw: Workspace, va: Address) -> bool:
     """
     test if the given address is valid in the given vivisect workspace.
 
@@ -580,7 +593,7 @@ def is_valid_address(vw, va):
     return vw.probeMemory(va, 1, envi.memory.MM_READ)
 
 
-def get_function_constants(vw, fva):
+def get_function_constants(vw: Workspace, fva: Address) -> Iterator[int]:
     """
     enumerate the immediate constants referenced by instructions in the given function.
     does not yield valid addresses in the given workspace.
@@ -606,7 +619,7 @@ def get_function_constants(vw, fva):
                 yield c
 
 
-def get_section_data(pe, section):
+def get_section_data(pe, section) -> bytes:
     """
     fetch the raw data of the given section.
 
@@ -679,33 +692,33 @@ class Debugger(object):
         else:
             return self.v.__setattribute__(k, v)
 
-    def write_memory(self, va, buf):
+    def write_memory(self, va: Address, buf: bytes):
         self.v.memobj.writeMemory(va, buf)
 
-    def read_memory(self, va, size):
+    def read_memory(self, va: Address, size: int):
         return self.v.trace.readMemory(va, size)
 
-    def read_dword(self, va):
+    def read_dword(self, va: Address) -> int:
         return struct.unpack("<I", self.read_memory(va, 4))[0]
 
-    def write_dword(self, va, v):
+    def write_dword(self, va: Address, v: int):
         self.write_memory(va, struct.pack("<I", v))
 
-    def read_ascii(self, va):
+    def read_ascii(self, va: Address) -> str:
         buf = self.read_memory(va, 1024)
         return buf.partition(b"\x00")[0].decode("ascii")
 
-    def pop(self):
-        v = self.read_dword(self.esp)
-        self.esp = self.esp + 4
+    def pop(self) -> int:
+        v = self.read_dword(self.esp)  # type: ignore
+        self.esp = self.esp + 4  # type: ignore
         return v
 
-    def push(self, v):
+    def push(self, v: int):
         self.esp = self.esp - 4
         self.write_dword(self.esp, v)
 
 
-def readMemoryCurrentSection(vw, va, size):
+def readMemoryCurrentSection(vw: Workspace, va: Address, size: int) -> bytes:
     """
     only read memory up to current section end
     """

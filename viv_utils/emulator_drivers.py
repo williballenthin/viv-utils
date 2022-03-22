@@ -1,7 +1,7 @@
 import sys
 import logging
 import collections
-from typing import List, Tuple, Callable, Optional
+from typing import List, Callable, Optional
 
 import envi as v_envi
 import envi.exc
@@ -9,7 +9,8 @@ import vivisect
 import envi.memory as v_mem
 import vivisect.const
 import envi.archs.i386.disasm
-from typing_extensions import TypeAlias
+
+from viv_utils.types import *
 
 logger = logging.getLogger(__name__)
 
@@ -23,21 +24,6 @@ class BreakpointHit(Exception):
         self.va = va
         self.reason = reason
 
-
-DataType: TypeAlias = str
-SymbolName: TypeAlias = str
-
-CallingConvention: TypeAlias = str
-ReturnType: TypeAlias = DataType
-ReturnName: TypeAlias = str
-FunctionName: TypeAlias = SymbolName
-ArgType: TypeAlias = DataType
-ArgName: TypeAlias = SymbolName
-FunctionArg: TypeAlias = Tuple[ArgType, ArgName]
-# type returned by `vw.getImpApi`
-API: TypeAlias = Tuple[ReturnType, ReturnName, Optional[CallingConvention], FunctionName, List[FunctionArg]]
-# shortcut
-Emulator: TypeAlias = vivisect.impemu.emulator.WorkspaceEmulator
 
 # a hook overrides an API encountered by an emulator.
 #
