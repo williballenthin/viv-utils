@@ -19,17 +19,9 @@ class StopEmulation(Exception):
 
 
 class BreakpointHit(Exception):
-    def __init__(self, va: int):
+    def __init__(self, va: int, reason=None):
         self.va = va
-
-
-class InstructionRangeExceededError(Exception):
-    def __init__(self, pc):
-        super(InstructionRangeExceededError, self).__init__()
-        self.pc = pc
-
-    def __str__(self):
-        return "InstructionRangeExceededError(ended at instruction 0x%08X)" % self.pc
+        self.reason = reason
 
 
 DataType: TypeAlias = str
@@ -416,19 +408,69 @@ class DebuggerEmulatorDriver(EmulatorDriver):
     """
     this is a EmulatorDriver that supports debugger-like operations,
       such as stepi, stepo, call, etc.
+    these operations are implemented as monitors, and serve as good examples.
 
     it also supports "breakpoints": a set of addresses such that,
      when encountering the address, a `BreakpointHit` exception is raised.
     """
 
-    def __init__(self, *args, repmax=None, **kwargs):
+    class MaxInsnMonitor(Monitor):
+        def __init__(self, max_insn):
+            super().__init__()
+            self.max_insn = max_insn
+            self.counter = 0
+
+        def prehook(self, emu, op, pc):
+            if self.counter >= self.max_insn:
+                raise BreakpointHit(pc, reason="max_insn")
+
+            self.counter += 1
+
+        def reset(self):
+            self.counter = 0
+
+    class MaxHitMonitor(Monitor):
+        def __init__(self, max_hit):
+            super().__init__()
+            self.max_hit = max_hit
+            self.counter = collections.Counter()
+
+        def prehook(self, emu, op, pc):
+            if self.counter.get(pc, 0) >= self.max_hit:
+                raise BreakpointHit(pc, reason="max_hit")
+
+            self.counter[pc] += 1
+
+        def reset(self):
+            self.counter = collections.Counter()
+
+    class BreakpointMonitor(Monitor):
+        def __init__(self):
+            super().__init__()
+            self.breakpoints = set()
+
+        def prehook(self, emu, op, pc):
+            if pc in self.breakpoints:
+                raise BreakpointHit(pc, reason="breakpoint")
+
+    def __init__(self, *args, repmax=None, max_insn=None, max_hit=None, **kwargs):
         super().__init__(*args, **kwargs)
         if repmax is not None:
             self.setEmuOpt("i386:repmax", repmax)
 
+        self.max_insn_mon = self.MaxInsnMonitor(max_insn or sys.maxsize)
+        self.max_hit_mon = self.MaxHitMonitor(max_hit or sys.maxsize)
+        self.bp_mon = self.BreakpointMonitor()
+
+        self.add_monitor(self.max_insn_mon)
+        self.add_monitor(self.max_hit_mon)
+        self.add_monitor(self.bp_mon)
+
         # this is a public member.
         # add and remove breakpoints by manipulating this set.
-        self.breakpoints = set()
+        #
+        # implementation: note that we're sharing the set() instance here.
+        self.breakpoints = self.bp_mon.breakpoints
 
     def step(self, avoid_calls):
         emu = self._emu
@@ -438,9 +480,6 @@ class DebuggerEmulatorDriver(EmulatorDriver):
 
         for mon in self._monitors:
             mon.prehook(emu, op, startpc)
-
-        if startpc in self.breakpoints:
-            raise BreakpointHit(startpc)
 
         if self.is_call(op):
             self.handle_call(op, avoid_calls=avoid_calls)
@@ -465,10 +504,11 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         stepi until breakpoint is hit or max_instruction_count reached.
         raises the exception in either case.
         """
-        for _ in range(max_instruction_count):
-            self.stepi()
+        self.max_hit_mon.reset()
+        self.max_insn_mon.reset()
 
-        raise InstructionRangeExceededError(self.getProgramCounter())
+        while True:
+            self.stepi()
 
     class UntilMnemonicMonitor(Monitor):
         def __init__(self, mnems: List[str]):
@@ -477,7 +517,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
 
         def prehook(self, emu, op, pc):
             if op.mnem in self.mnems:
-                raise BreakpointHit(pc)
+                raise BreakpointHit(pc, reason="mnemonic")
 
     def run_to_mnem(self, mnems: List[str], max_instruction_count=sys.maxsize):
         """
@@ -492,9 +532,17 @@ class DebuggerEmulatorDriver(EmulatorDriver):
 
         try:
             self.run(max_instruction_count=max_instruction_count)
-        except BreakpointHit:
+        finally:
             self.remove_monitor(mon)
-            raise
+
+    class UntilVAMonitor(Monitor):
+        def __init__(self, va: int):
+            super().__init__()
+            self.va = va
+
+        def prehook(self, emu, op, pc):
+            if pc == self.va:
+                raise BreakpointHit(pc, reason="va")
 
     def run_to_va(self, va: int, max_instruction_count=sys.maxsize):
         """
@@ -504,16 +552,16 @@ class DebuggerEmulatorDriver(EmulatorDriver):
           - given address reached (but not executed).
         raises the exception in any case.
         """
-        """stepi until given address"""
-        if va in self.breakpoints:
+        mon = self.UntilVAMonitor(va)
+        self.add_monitor(mon)
+
+        try:
             self.run(max_instruction_count=max_instruction_count)
-        else:
-            self.breakpoints.add(va)
-            try:
-                self.run()
-            except BreakpointHit:
-                self.breakpoints.remove(va)
+        except BreakpointHit as e:
+            if e.va != va:
                 raise
+        finally:
+            self.remove_monitor(mon)
 
 
 class FullCoverageEmulatorDriver(EmulatorDriver):

@@ -190,7 +190,7 @@ def test_driver_hook_tailjump(pma01):
 
 def test_dbg_driver_max_insn(pma01):
     emu = pma01.getEmulator()
-    drv = vudrv.DebuggerEmulatorDriver(emu)
+    drv = vudrv.DebuggerEmulatorDriver(emu, max_insn=1)
 
     # .text:10001342 57                      push    edi
     # .text:10001343 56                      push    esi             ; fdwReason
@@ -198,8 +198,9 @@ def test_dbg_driver_max_insn(pma01):
     # .text:10001345 E8 C6 FC FF FF          call    DllMain (0x10001010)
     # .text:1000134A 83 FE 01                cmp     esi, 1
     drv.setProgramCounter(0x10001342)
-    with pytest.raises(vudrv.InstructionRangeExceededError):
-        drv.run(max_instruction_count=1)
+    with pytest.raises(vudrv.BreakpointHit) as e:
+        drv.run()
+    assert e.value.reason == "max_insn"
     assert drv.getProgramCounter() == 0x10001343
 
 
@@ -214,8 +215,9 @@ def test_dbg_driver_bp(pma01):
     # .text:1000134A 83 FE 01                cmp     esi, 1
     drv.setProgramCounter(0x10001342)
     drv.breakpoints.add(0x10001344)
-    with pytest.raises(vudrv.BreakpointHit):
+    with pytest.raises(vudrv.BreakpointHit) as e:
         drv.run()
+    assert e.value.reason == "breakpoint"
     assert drv.getProgramCounter() == 0x10001344
 
 
@@ -229,8 +231,9 @@ def test_dbg_driver_until_mnem(pma01):
     # .text:10001345 E8 C6 FC FF FF          call    DllMain (0x10001010)
     # .text:1000134A 83 FE 01                cmp     esi, 1
     drv.setProgramCounter(0x10001342)
-    with pytest.raises(vudrv.BreakpointHit):
+    with pytest.raises(vudrv.BreakpointHit) as e:
         drv.run_to_mnem(["call"])
+    assert e.value.reason == "mnemonic"
     assert drv.getProgramCounter() == 0x10001345
 
 
@@ -244,8 +247,7 @@ def test_dbg_driver_until_va(pma01):
     # .text:10001345 E8 C6 FC FF FF          call    DllMain (0x10001010)
     # .text:1000134A 83 FE 01                cmp     esi, 1
     drv.setProgramCounter(0x10001342)
-    with pytest.raises(vudrv.BreakpointHit):
-        drv.run_to_va(0x10001344)
+    drv.run_to_va(0x10001344)
     assert drv.getProgramCounter() == 0x10001344
 
 
@@ -364,3 +366,50 @@ def test_dbg_driver_rep(pma01):
         # buggy viv answer
         0xFFFFFFFF - REPMAX + len("hello"),
     )
+
+
+def test_dbg_driver_maxhit(pma01):
+    emu = pma01.getEmulator()
+    drv = vudrv.DebuggerEmulatorDriver(emu)
+    cov = CoverageMonitor()
+    drv.add_monitor(cov)
+
+    # .text:10001010 B8 F8 11 00 00          mov     eax, 11F8h
+    # .text:10001015 E8 06 02 00 00          call    __alloca_probe
+    # .text:1000101A 8B 84 24 00 12 00 00    mov     eax, [esp+11F8h+fdwReason]
+    #
+    # and __alloca_probe loops across pages on the stack, like:
+    #
+    # .text:1000122A 72 14                                   jb      short loc_10001240
+    # .text:1000122C
+    # .text:1000122C 81 E9 00 10 00 00                       sub     ecx, 1000h
+    # .text:10001232 2D 00 10 00 00                          sub     eax, 1000h
+    # .text:10001237 85 01                                   test    [ecx], eax
+    # .text:10001239 3D 00 10 00 00                          cmp     eax, 1000h
+    # .text:1000123E 73 EC                                   jnb     short loc_1000122C
+    # .text:10001240
+    # .text:10001240 2B C8                                   sub     ecx, eax
+    drv.setProgramCounter(0x10001015)
+    # alloca(0x2000): two probing loops
+    drv.setRegisterByName("eax", 0x2000)
+    drv.run_to_va(0x1000101A)
+
+    # outside the loop: hit once
+    assert cov.addresses[0x1000122A] == 1
+    # inside the loop: hit twice
+    assert cov.addresses[0x1000122C] == 2
+
+    drv = vudrv.DebuggerEmulatorDriver(emu, max_hit=2)
+    drv.setProgramCounter(0x10001015)
+    drv.setRegisterByName("eax", 0x2000)
+    drv.run_to_va(0x1000101A)
+
+    drv = vudrv.DebuggerEmulatorDriver(emu, max_hit=1)
+    drv.setProgramCounter(0x10001015)
+    drv.setRegisterByName("eax", 0x2000)
+    with pytest.raises(vudrv.BreakpointHit) as e:
+        drv.run_to_va(0x1000101A)
+
+    # first address in the inner loop
+    # which will be hit twice, and therefore, break.
+    assert e.value.va == 0x1000122C
