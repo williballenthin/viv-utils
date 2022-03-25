@@ -485,7 +485,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
     def stepi(self):
         return self.step(False)
 
-    def run(self, max_instruction_count=sys.maxsize):
+    def run(self):
         """
         stepi until breakpoint is hit or max_instruction_count reached.
         raises the exception in either case.
