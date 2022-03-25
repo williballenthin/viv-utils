@@ -202,12 +202,14 @@ class EmulatorDriver(EmuHelperMixin):
         #   - driver.hooks
         #   - emu.hooks (default vivisect hooks)
 
+        logger.info("%s", self._monitors)
         for mon in self._monitors:
             try:
                 r = mon.apicall(self, api, argv)
             except StopEmulation:
                 raise
             except Exception as e:
+                raise
                 logger.debug("driver: %s.apicall failed: %s", mon.__class__.__name__, e)
                 continue
             else:
@@ -222,6 +224,7 @@ class EmulatorDriver(EmuHelperMixin):
             except StopEmulation:
                 raise
             except Exception as e:
+                raise
                 logger.debug("driver: hook: %r failed: %s", hook, e)
                 continue
             else:
@@ -236,10 +239,12 @@ class EmulatorDriver(EmuHelperMixin):
             # note that we prefer locally configured hooks, first.
             hook = emu.hooks.get(callname)
             try:
-                hook(self, api, argv)
+                # TODO keep this consistent with our hook API
+                hook(self, callconv, api, argv)
             except StopEmulation:
                 raise
             except Exception as e:
+                raise
                 logger.debug("driver: emu.hook.%s failed: %s", callname, e)
             else:
                 # note: short circuit
@@ -276,9 +281,12 @@ class EmulatorDriver(EmuHelperMixin):
         emu.executeOpcode(op)
         target = emu.getProgramCounter()
 
+        logger.debug("B current PC: 0x%x vs. next instruction at 0x%x", emu.getProgramCounter(), pc + len(op))
         if self._handle_hook():
             # some hook handled the call,
             # so make sure PC is at the next instruction
+            logger.debug("A current PC: 0x%x vs. next instruction at 0x%x", emu.getProgramCounter(), pc + len(op))
+            # TODO enable but fix in vivisect, see #515
             assert emu.getProgramCounter() == pc + len(op)
 
             # hook handled it
@@ -299,6 +307,7 @@ class EmulatorDriver(EmuHelperMixin):
             callconv = self.get_calling_convention(convname)
             # this will jump to the return address from the stack.
             callconv.execCallReturn(emu, 0, len(funcargs))
+            # TODO may not always be the case! e.g. for shellcode (see tests)
             assert emu.getProgramCounter() == pc + len(op)
 
             # pc is at instruction after call
@@ -356,12 +365,8 @@ class EmulatorDriver(EmuHelperMixin):
         # because there's an API found at this target address.
 
         if self._handle_hook():
-            # some hook handled the call,
-            # so make sure PC is at the next instruction
-            assert emu.getProgramCounter() == pc + len(op)
-
-            # hook handled it.
-            # pc is at instruction after call.
+            # some hook handled the tail call,
+            # pc is at call's return address.
             return False
 
         elif avoid_calls or emu.getVivTaint(target) or not emu.probeMemory(target, 0x1, v_mem.MM_EXEC):
@@ -485,16 +490,21 @@ class DebuggerEmulatorDriver(EmulatorDriver):
     def stepi(self):
         return self.step(False)
 
-    def run(self, max_instruction_count=sys.maxsize):
+    def run(self):
         """
         stepi until breakpoint is hit or max_instruction_count reached.
         raises the exception in either case.
         """
         self.max_hit_mon.reset()
         self.max_insn_mon.reset()
+        self.max_insn_mon.max_insn = max_instruction_count
+        hits = collections.defaultdict(int)
 
         while True:
+            pc = self.getProgramCounter()
+            logger.debug("count: %8d, 0x%x (%d)", self.max_insn_mon.counter, pc, hits[pc])
             self.stepi()
+            hits[pc] += 1
 
     class UntilMnemonicMonitor(Monitor):
         def __init__(self, mnems: List[str]):
@@ -505,7 +515,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             if op.mnem in self.mnems:
                 raise BreakpointHit(pc, reason="mnemonic")
 
-    def run_to_mnem(self, mnems: List[str], max_instruction_count=sys.maxsize):
+    def run_to_mnem(self, mnems: List[str]):
         """
         stepi until:
           - breakpoint is hit, or
@@ -517,7 +527,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         self.add_monitor(mon)
 
         try:
-            self.run(max_instruction_count=max_instruction_count)
+            self.run()
         finally:
             self.remove_monitor(mon)
 
@@ -530,7 +540,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             if pc == self.va:
                 raise BreakpointHit(pc, reason="va")
 
-    def run_to_va(self, va: int, max_instruction_count=sys.maxsize):
+    def run_to_va(self, va: int):
         """
         stepi until:
           - breakpoint is hit, or
@@ -542,7 +552,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         self.add_monitor(mon)
 
         try:
-            self.run(max_instruction_count=max_instruction_count)
+            self.run()
         except BreakpointHit as e:
             if e.va != va:
                 raise
@@ -654,7 +664,8 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
         else:
             return does_fallthrough, branches
 
-    def run(self, va: int):
+    # TODO maxrep?
+    def run(self, va: int, stopva: int = None):
         # explore from the given address, emulating all encountered instructions once.
         #
         # use a queue of emulator snaps, one for each block that still needs to be explored.
@@ -697,9 +708,8 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
                 lastpc = emu.getProgramCounter()
                 seen.add(lastpc)
 
-                # if lastpc == 0x1000104D:
-                #    from IPython import embed; embed()
-                #    return
+                if stopva and lastpc == stopva:
+                    return
 
                 try:
                     does_fallthrough, branches = self.step()
@@ -730,6 +740,11 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
                         mon.postblock(self, blockstart, blockend)
 
                     # stop emulating, and go to next block in the queue.
+                    break
+                except v_envi.exc.BreakpointHit:
+                    # TODO?!
+                    #  see tests/data/malware/8487c81db7bd9b50ed10713e47765bf7021a2165b2d910437041d2c2fdd096fa
+                    #  see tests/data/malware/8487c81db7bd9b50ed10713e47765bf7021a2165b2d910437041d2c2fdd096fa --function 0x10001f90
                     break
 
                 if branches:
