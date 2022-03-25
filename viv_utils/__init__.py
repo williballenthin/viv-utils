@@ -416,13 +416,12 @@ def get_prev_loc(vw: Workspace, va: Address):
 def get_prev_opcode(vw: Workspace, va: Address):
     lva, lsize, ltype, linfo = get_prev_loc(vw, va)
     if ltype != vivisect.const.LOC_OP:
-        raise RuntimeError("failed to find prev instruction for va: %x" % va)
+        raise ValueError("failed to find prev instruction for va: %x" % va)
 
     try:
         op = vw.parseOpcode(lva)
     except Exception:
-        logger.warning("failed to parse prev instruction for va: %x", va)
-        raise
+        raise ValueError("failed to parse prev instruction for va: %x" % va)
 
     return op
 
