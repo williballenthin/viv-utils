@@ -505,7 +505,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             if op.mnem in self.mnems:
                 raise BreakpointHit(pc, reason="mnemonic")
 
-    def run_to_mnem(self, mnems: List[str], max_instruction_count=sys.maxsize):
+    def run_to_mnem(self, mnems: List[str]):
         """
         stepi until:
           - breakpoint is hit, or
@@ -517,7 +517,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         self.add_monitor(mon)
 
         try:
-            self.run(max_instruction_count=max_instruction_count)
+            self.run()
         finally:
             self.remove_monitor(mon)
 
@@ -530,7 +530,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             if pc == self.va:
                 raise BreakpointHit(pc, reason="va")
 
-    def run_to_va(self, va: int, max_instruction_count=sys.maxsize):
+    def run_to_va(self, va: int):
         """
         stepi until:
           - breakpoint is hit, or
@@ -542,7 +542,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         self.add_monitor(mon)
 
         try:
-            self.run(max_instruction_count=max_instruction_count)
+            self.run()
         except BreakpointHit as e:
             if e.va != va:
                 raise
