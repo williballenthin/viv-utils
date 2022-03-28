@@ -452,7 +452,7 @@ def get_all_xrefs_to(vw: Workspace, va: Address):
 
     try:
         op = get_prev_opcode(vw, va)
-    except (ValueError, RuntimeError):
+    except ValueError:
         return
 
     for tova, bflags in op.getBranches():
