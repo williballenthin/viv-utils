@@ -34,7 +34,8 @@ class BreakpointHit(Exception):
 # hooks can fetch the current $PC, registers, mem, etc. via the provided emulator parameter.
 #
 # a hook is a callable, such as a function or class with `__call__`,
-# if the hook is "stateless", use a simple function:
+# if the hook is "stateless", use a simple function (note that the
+# hook API and vivisect's imphook API differ slightly):
 #
 #     hook_OutputDebugString(emu, api, argv):
 #         _, _, cconv, name, _ = api
@@ -236,8 +237,7 @@ class EmulatorDriver(EmuHelperMixin):
             # note that we prefer locally configured hooks, first.
             hook = emu.hooks.get(callname)
             try:
-                # the emulator hook API differs
-                # TODO keep hook API here consistent with vivisect API?
+                # the vivisect imphook API differs from the viv-utils hooks
                 hook(self, callconv, api, argv)
             except StopEmulation:
                 raise
