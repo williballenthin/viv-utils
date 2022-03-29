@@ -278,12 +278,19 @@ class EmulatorDriver(EmuHelperMixin):
         emu.executeOpcode(op)
         target = emu.getProgramCounter()
 
-        if self._handle_hook():
+        if not avoid_calls and self._handle_hook():
             # some hook handled the call,
             # so make sure PC is at the next instruction
             # this may fail during emulation, e.g. if the stack gets corrupted during emulation or by a function hook
             if emu.getProgramCounter() != pc + len(op):
-                logger.warning("hook failed to restore PC correctly after call, from: 0x%x, expected: 0x%x, found: 0x%x", pc, pc + len(op), emu.getProgramCounter())
+                logger.warning(
+                    "hook failed to restore PC correctly after call, from: 0x%x, expected: 0x%x, found: 0x%x",
+                    pc,
+                    pc + len(op),
+                    emu.getProgramCounter(),
+                )
+                # TODO should raise here
+                return True
 
             # hook handled it
             # pc is at instruction after call or undefined if there was an error
@@ -304,7 +311,12 @@ class EmulatorDriver(EmuHelperMixin):
             # this will jump to the return address from the stack.
             callconv.execCallReturn(emu, 0, len(funcargs))
             if emu.getProgramCounter() != pc + len(op):
-                logger.warning("hook failed to restore PC correctly after call, from: 0x%x, expected: 0x%x, found: 0x%x", pc, pc + len(op), emu.getProgramCounter())
+                logger.warning(
+                    "hook failed to restore PC correctly after call, from: 0x%x, expected: 0x%x, found: 0x%x",
+                    pc,
+                    pc + len(op),
+                    emu.getProgramCounter(),
+                )
 
             # pc is at instruction after call or undefined if there was an error
             return False
@@ -362,7 +374,12 @@ class EmulatorDriver(EmuHelperMixin):
 
         if self._handle_hook():
             if emu.getProgramCounter() != pc + len(op):
-                logger.warning("hook failed to restore PC correctly after call, from: 0x%x, expected: 0x%x, found: 0x%x", pc, pc + len(op), emu.getProgramCounter())
+                logger.warning(
+                    "hook failed to restore PC correctly after call, from: 0x%x, expected: 0x%x, found: 0x%x",
+                    pc,
+                    pc + len(op),
+                    emu.getProgramCounter(),
+                )
             # some hook handled the tail call,
             # pc is at call's return address.
             return False
@@ -391,6 +408,15 @@ class EmulatorDriver(EmuHelperMixin):
 
             # pc is at first instruction in the function.
             return True
+
+    class UntilVAMonitor(Monitor):
+        def __init__(self, va: int):
+            super().__init__()
+            self.va = va
+
+        def prehook(self, emu, op, pc):
+            if pc == self.va:
+                raise BreakpointHit(pc, reason="va")
 
 
 class DebuggerEmulatorDriver(EmulatorDriver):
@@ -524,15 +550,6 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         finally:
             self.remove_monitor(mon)
 
-    class UntilVAMonitor(Monitor):
-        def __init__(self, va: int):
-            super().__init__()
-            self.va = va
-
-        def prehook(self, emu, op, pc):
-            if pc == self.va:
-                raise BreakpointHit(pc, reason="va")
-
     def run_to_va(self, va: int):
         """
         stepi until:
@@ -657,6 +674,16 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
         else:
             return does_fallthrough, branches
 
+    def run_to_va(self, va: int, tova: int):
+        """
+        explore from the given address up to an address, see run function
+        """
+        mon = self.UntilVAMonitor(tova)
+        self.add_monitor(mon)
+
+        self.run(va)
+        self.remove_monitor(mon)
+
     def run(self, va: int):
         # explore from the given address, emulating all encountered instructions once.
         #
@@ -700,7 +727,6 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
                 lastpc = emu.getProgramCounter()
                 seen.add(lastpc)
 
-
                 try:
                     does_fallthrough, branches = self.step()
                 except v_envi.UnsupportedInstruction:
@@ -731,8 +757,13 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
 
                     # stop emulating, and go to next block in the queue.
                     break
+                except envi.exc.BreakpointHit:
+                    # emulation likely wandered off, e.g., into alignment (CC bytes)
+
+                    # stop emulating, and go to next block in the queue.
+                    break
                 except BreakpointHit as e:
-                    # client indicated not to emulate beyond the given insn
+                    # client indicated not to emulate beyond the given address
                     # by raising a breakpoint (via a monitor).
                     logger.debug(
                         "driver: run_function: breakpoint: %s: 0x%x",
@@ -743,8 +774,9 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
                     for mon in self._monitors:
                         mon.postblock(self, blockstart, blockend)
 
-                     # stop emulating, and go to next block in the queue.
-                     break
+                    # stop emulation and done
+                    # limitation: only finds one path that leads to target address
+                    return
 
                 if branches:
                     blockend = lastpc
