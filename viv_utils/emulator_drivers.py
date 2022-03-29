@@ -87,6 +87,16 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor):
         logger.warning("monitor: anomaly: %s", e)
 
 
+class UntilVAMonitor(Monitor):
+    def __init__(self, va: int):
+        super().__init__()
+        self.va = va
+
+    def prehook(self, emu, op, pc):
+        if pc == self.va:
+            raise BreakpointHit(pc, reason="va")
+
+
 class EmuHelperMixin:
     def readString(self, va, maxlength=0x100):
         """naively read ascii string"""
@@ -409,15 +419,6 @@ class EmulatorDriver(EmuHelperMixin):
             # pc is at first instruction in the function.
             return True
 
-    class UntilVAMonitor(Monitor):
-        def __init__(self, va: int):
-            super().__init__()
-            self.va = va
-
-        def prehook(self, emu, op, pc):
-            if pc == self.va:
-                raise BreakpointHit(pc, reason="va")
-
 
 class DebuggerEmulatorDriver(EmulatorDriver):
     """
@@ -558,7 +559,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
           - given address reached (but not executed).
         raises the exception in any case.
         """
-        mon = self.UntilVAMonitor(va)
+        mon = UntilVAMonitor(va)
         self.add_monitor(mon)
 
         try:
@@ -678,11 +679,12 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
         """
         explore from the given address up to an address, see run function
         """
-        mon = self.UntilVAMonitor(tova)
+        mon = UntilVAMonitor(tova)
         self.add_monitor(mon)
-
-        self.run(va)
-        self.remove_monitor(mon)
+        try:
+            self.run(va)
+        finally:
+            self.remove_monitor(mon)
 
     def run(self, va: int):
         # explore from the given address, emulating all encountered instructions once.
