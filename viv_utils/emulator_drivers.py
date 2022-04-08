@@ -9,6 +9,7 @@ import vivisect
 import envi.memory as v_mem
 import vivisect.const
 import envi.archs.i386.disasm
+from viv_utils.helpers import remove_default_hooks
 
 from viv_utils.types import *
 
@@ -132,6 +133,7 @@ class EmulatorDriver(EmuHelperMixin):
 
     def __init__(self, emu):
         super(EmulatorDriver, self).__init__()
+        remove_default_hooks(emu)
         self._emu = emu
         self._monitors = set([])
         self._hooks = set([])
