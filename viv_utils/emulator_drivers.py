@@ -288,7 +288,7 @@ class EmulatorDriver(EmuHelperMixin):
         emu.executeOpcode(op)
         target = emu.getProgramCounter()
 
-        if not avoid_calls and self._handle_hook():
+        if self._handle_hook():
             # some hook handled the call,
             # so make sure PC is at the next instruction
             # this may fail during emulation, e.g. if the stack gets corrupted during emulation or by a function hook
