@@ -9,7 +9,6 @@ import vivisect
 import envi.memory as v_mem
 import vivisect.const
 import envi.archs.i386.disasm
-from viv_utils.helpers import remove_default_hooks
 
 from viv_utils.types import *
 
@@ -129,14 +128,17 @@ class EmulatorDriver(EmuHelperMixin):
         emu = vw.getEmulator()
         drv = EmulatorDriver(emu)
         drv.readString(0x401000)
+
+    by default, select default vivisect hooks (imphooks) are removed to avoid emulation inconsistencies
     """
 
-    def __init__(self, emu):
+    def __init__(self, emu, remove_default_viv_hooks=True):
         super(EmulatorDriver, self).__init__()
-        remove_default_hooks(emu)
         self._emu = emu
         self._monitors = set([])
         self._hooks = set([])
+        if remove_default_viv_hooks:
+            self.remove_default_viv_hooks()
 
     def __getattr__(self, name):
         # look just like an emulator
@@ -162,7 +164,7 @@ class EmulatorDriver(EmuHelperMixin):
 
     def add_hook(self, hook):
         """
-        hooks are functions that can override APIs encountered during emumation.
+        hooks are functions that can override APIs encountered during emulation.
         see the `Hook` superclass.
 
         there can be multiple hooks added, even for the same API.
@@ -172,6 +174,31 @@ class EmulatorDriver(EmuHelperMixin):
 
     def remove_hook(self, hook):
         self._hooks.remove(hook)
+
+    def remove_default_viv_hooks(self):
+        """
+        vivisect comes with default emulation hooks (imphooks) that emulate
+         - API calls, e.g. GetProcAddress
+         - abstractions of library code functionality, e.g. _alloca_probe
+
+        in our testing there are inconsistencies in the hook implementation, e.g. around function returns
+        this function removes all imphooks that do not emulate a return
+        """
+        for name in (
+                "ntdll.seh3_prolog",
+                "ntdll.seh4_prolog",
+                "ntdll.seh4_gs_prolog",
+                "ntdll.seh3_epilog",
+                "ntdll.seh4_epilog",
+                "ntdll.eh_prolog",
+                "ntdll._alloca_probe",
+                "ntdll.gs_prolog",
+        ):
+            self.remove_default_viv_hook(name)
+
+    def remove_default_viv_hook(self, hook_name: str):
+        if hook_name in self._emu.hooks:
+            del self._emu.hooks[hook_name]
 
     @staticmethod
     def is_call(op):
@@ -471,8 +498,8 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             if pc in self.breakpoints:
                 raise BreakpointHit(pc, reason="breakpoint")
 
-    def __init__(self, *args, repmax=None, max_insn=None, max_hit=None, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, repmax=None, max_insn=None, max_hit=None, remove_default_viv_hooks=True, **kwargs):
+        super().__init__(*args, remove_default_viv_hooks, **kwargs)
         if repmax is not None:
             self.setEmuOpt("i386:repmax", repmax)
 
@@ -582,8 +609,8 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
     use a monitor to receive callbacks describing the found instructions and blocks.
     """
 
-    def __init__(self, *args, repmax=None, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, repmax=None, remove_default_viv_hooks=True, **kwargs):
+        super().__init__(*args, remove_default_viv_hooks, **kwargs)
         if repmax is not None:
             self.setEmuOpt("i386:repmax", repmax)
 
