@@ -185,14 +185,14 @@ class EmulatorDriver(EmuHelperMixin):
         this function removes all imphooks that do not emulate a return
         """
         for name in (
-                "ntdll.seh3_prolog",
-                "ntdll.seh4_prolog",
-                "ntdll.seh4_gs_prolog",
-                "ntdll.seh3_epilog",
-                "ntdll.seh4_epilog",
-                "ntdll.eh_prolog",
-                "ntdll._alloca_probe",
-                "ntdll.gs_prolog",
+            "ntdll.seh3_prolog",
+            "ntdll.seh4_prolog",
+            "ntdll.seh4_gs_prolog",
+            "ntdll.seh3_epilog",
+            "ntdll.seh4_epilog",
+            "ntdll.eh_prolog",
+            "ntdll._alloca_probe",
+            "ntdll.gs_prolog",
         ):
             self.remove_default_viv_hook(name)
 
@@ -328,11 +328,11 @@ class EmulatorDriver(EmuHelperMixin):
                     pc + len(op),
                     emu.getProgramCounter(),
                 )
-                # TODO should raise here
-                return True
+                # pc is undefined (emulation error)
+                raise StopEmulation
 
             # hook handled it
-            # pc is at instruction after call or undefined if there was an error
+            # pc is at instruction after call
             return False
 
         elif avoid_calls or emu.getVivTaint(target) or not emu.probeMemory(target, 0x1, v_mem.MM_EXEC):
@@ -356,8 +356,10 @@ class EmulatorDriver(EmuHelperMixin):
                     pc + len(op),
                     emu.getProgramCounter(),
                 )
+                # pc is undefined (emulation error)
+                raise StopEmulation
 
-            # pc is at instruction after call or undefined if there was an error
+            # pc is at instruction after call
             return False
 
         else:
@@ -419,6 +421,9 @@ class EmulatorDriver(EmuHelperMixin):
                     pc + len(op),
                     emu.getProgramCounter(),
                 )
+                # pc is undefined (emulation error)
+                raise StopEmulation
+
             # some hook handled the tail call,
             # pc is at call's return address.
             return False
