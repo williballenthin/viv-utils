@@ -132,13 +132,11 @@ class EmulatorDriver(EmuHelperMixin):
     by default, select default vivisect hooks (imphooks) are removed to avoid emulation inconsistencies
     """
 
-    def __init__(self, emu, remove_default_viv_hooks=True):
+    def __init__(self, emu):
         super(EmulatorDriver, self).__init__()
         self._emu = emu
         self._monitors = set([])
         self._hooks = set([])
-        if remove_default_viv_hooks:
-            self.remove_default_viv_hooks()
 
     def __getattr__(self, name):
         # look just like an emulator
@@ -174,31 +172,6 @@ class EmulatorDriver(EmuHelperMixin):
 
     def remove_hook(self, hook):
         self._hooks.remove(hook)
-
-    def remove_default_viv_hooks(self):
-        """
-        vivisect comes with default emulation hooks (imphooks) that emulate
-         - API calls, e.g. GetProcAddress
-         - abstractions of library code functionality, e.g. _alloca_probe
-
-        in our testing there are inconsistencies in the hook implementation, e.g. around function returns
-        this function removes all imphooks that do not emulate a return
-        """
-        for name in (
-            "ntdll.seh3_prolog",
-            "ntdll.seh4_prolog",
-            "ntdll.seh4_gs_prolog",
-            "ntdll.seh3_epilog",
-            "ntdll.seh4_epilog",
-            "ntdll.eh_prolog",
-            "ntdll._alloca_probe",
-            "ntdll.gs_prolog",
-        ):
-            self.remove_default_viv_hook(name)
-
-    def remove_default_viv_hook(self, hook_name: str):
-        if hook_name in self._emu.hooks:
-            del self._emu.hooks[hook_name]
 
     @staticmethod
     def is_call(op):
@@ -503,8 +476,8 @@ class DebuggerEmulatorDriver(EmulatorDriver):
             if pc in self.breakpoints:
                 raise BreakpointHit(pc, reason="breakpoint")
 
-    def __init__(self, *args, repmax=None, max_insn=None, max_hit=None, remove_default_viv_hooks=True, **kwargs):
-        super().__init__(*args, remove_default_viv_hooks, **kwargs)
+    def __init__(self, *args, repmax=None, max_insn=None, max_hit=None, **kwargs):
+        super().__init__(*args, **kwargs)
         if repmax is not None:
             self.setEmuOpt("i386:repmax", repmax)
 
@@ -614,8 +587,8 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
     use a monitor to receive callbacks describing the found instructions and blocks.
     """
 
-    def __init__(self, *args, repmax=None, remove_default_viv_hooks=True, **kwargs):
-        super().__init__(*args, remove_default_viv_hooks, **kwargs)
+    def __init__(self, *args, repmax=None, **kwargs):
+        super().__init__(*args, **kwargs)
         if repmax is not None:
             self.setEmuOpt("i386:repmax", repmax)
 
@@ -879,3 +852,18 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
                         mon.postblock(self, blockstart, blockend)
 
                     break
+
+
+def remove_default_viv_hooks(emu, allow_list=None):
+    """
+    vivisect comes with default emulation hooks (imphooks) that emulate
+     - API calls, e.g. GetProcAddress
+     - abstractions of library code functionality, e.g. _alloca_probe
+
+    in our testing there are inconsistencies in the hook implementation, e.g. around function returns
+    this function removes all imphooks except ones explicitly allowed
+    """
+    for hook_name in list(emu.hooks):
+        if allow_list and hook_name in allow_list:
+            continue
+        del emu.hooks[hook_name]
