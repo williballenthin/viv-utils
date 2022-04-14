@@ -128,8 +128,6 @@ class EmulatorDriver(EmuHelperMixin):
         emu = vw.getEmulator()
         drv = EmulatorDriver(emu)
         drv.readString(0x401000)
-
-    by default, select default vivisect hooks (imphooks) are removed to avoid emulation inconsistencies
     """
 
     def __init__(self, emu):
