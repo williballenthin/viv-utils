@@ -682,17 +682,6 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
         else:
             return does_fallthrough, branches
 
-    def run_to_va(self, va: int, tova: int):
-        """
-        explore from the given address up to an address, see run function
-        """
-        mon = UntilVAMonitor(tova)
-        self.add_monitor(mon)
-        try:
-            self.run(va)
-        finally:
-            self.remove_monitor(mon)
-
     def run(self, va: int):
         # explore from the given address, emulating all encountered instructions once.
         #
@@ -771,21 +760,6 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
 
                     # stop emulating, and go to next block in the queue.
                     break
-                except BreakpointHit as e:
-                    # client indicated not to emulate beyond the given address
-                    # by raising a breakpoint (via a monitor).
-                    logger.debug(
-                        "driver: run_function: breakpoint: %s: 0x%x",
-                        e.reason,
-                        lastpc,
-                    )
-                    blockend = lastpc
-                    for mon in self._monitors:
-                        mon.postblock(self, blockstart, blockend)
-
-                    # stop emulation and done
-                    # limitation: only finds one path that leads to target address
-                    return
 
                 if branches:
                     blockend = lastpc
@@ -852,6 +826,30 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
                         mon.postblock(self, blockstart, blockend)
 
                     break
+
+
+class SinglePathEmulatorDriver(FullCoverageEmulatorDriver):
+    """
+    an emulator that emulates the first path found to a target VA.
+    path is brute-forced via the full coverage emulator.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def run_to_va(self, va: int, tova: int):
+        """
+        explore from the given address up to an address, see run function
+        """
+        mon = UntilVAMonitor(tova)
+        self.add_monitor(mon)
+        try:
+            self.run(va)
+        except BreakpointHit as e:
+            if e.va != tova:
+                raise
+        finally:
+            self.remove_monitor(mon)
 
 
 def remove_default_viv_hooks(emu, allow_list=None):
