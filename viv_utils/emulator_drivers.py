@@ -34,7 +34,8 @@ class BreakpointHit(Exception):
 # hooks can fetch the current $PC, registers, mem, etc. via the provided emulator parameter.
 #
 # a hook is a callable, such as a function or class with `__call__`,
-# if the hook is "stateless", use a simple function:
+# if the hook is "stateless", use a simple function (note that the
+# hook API and vivisect's imphook API differ slightly):
 #
 #     hook_OutputDebugString(emu, api, argv):
 #         _, _, cconv, name, _ = api
@@ -84,6 +85,16 @@ class Monitor(vivisect.impemu.monitor.EmulationMonitor):
 
     def logAnomaly(self, emu, pc, e):
         logger.warning("monitor: anomaly: %s", e)
+
+
+class UntilVAMonitor(Monitor):
+    def __init__(self, va: int):
+        super().__init__()
+        self.va = va
+
+    def prehook(self, emu, op, pc):
+        if pc == self.va:
+            raise BreakpointHit(pc, reason="va")
 
 
 class EmuHelperMixin:
@@ -149,7 +160,7 @@ class EmulatorDriver(EmuHelperMixin):
 
     def add_hook(self, hook):
         """
-        hooks are functions that can override APIs encountered during emumation.
+        hooks are functions that can override APIs encountered during emulation.
         see the `Hook` superclass.
 
         there can be multiple hooks added, even for the same API.
@@ -236,7 +247,8 @@ class EmulatorDriver(EmuHelperMixin):
             # note that we prefer locally configured hooks, first.
             hook = emu.hooks.get(callname)
             try:
-                hook(self, api, argv)
+                # the vivisect imphook API differs from the viv-utils hooks
+                hook(self, callconv, api, argv)
             except StopEmulation:
                 raise
             except Exception as e:
@@ -279,7 +291,16 @@ class EmulatorDriver(EmuHelperMixin):
         if self._handle_hook():
             # some hook handled the call,
             # so make sure PC is at the next instruction
-            assert emu.getProgramCounter() == pc + len(op)
+            # this may fail during emulation, e.g. if the stack gets corrupted during emulation or by a function hook
+            if emu.getProgramCounter() != pc + len(op):
+                logger.warning(
+                    "hook failed to restore PC correctly after call, from: 0x%x, expected: 0x%x, found: 0x%x",
+                    pc,
+                    pc + len(op),
+                    emu.getProgramCounter(),
+                )
+                # pc is undefined (emulation error)
+                raise StopEmulation
 
             # hook handled it
             # pc is at instruction after call
@@ -299,7 +320,15 @@ class EmulatorDriver(EmuHelperMixin):
             callconv = self.get_calling_convention(convname)
             # this will jump to the return address from the stack.
             callconv.execCallReturn(emu, 0, len(funcargs))
-            assert emu.getProgramCounter() == pc + len(op)
+            if emu.getProgramCounter() != pc + len(op):
+                logger.warning(
+                    "hook failed to restore PC correctly after call, from: 0x%x, expected: 0x%x, found: 0x%x",
+                    pc,
+                    pc + len(op),
+                    emu.getProgramCounter(),
+                )
+                # pc is undefined (emulation error)
+                raise StopEmulation
 
             # pc is at instruction after call
             return False
@@ -356,12 +385,18 @@ class EmulatorDriver(EmuHelperMixin):
         # because there's an API found at this target address.
 
         if self._handle_hook():
-            # some hook handled the call,
-            # so make sure PC is at the next instruction
-            assert emu.getProgramCounter() == pc + len(op)
+            if emu.getProgramCounter() != pc + len(op):
+                logger.warning(
+                    "hook failed to restore PC correctly after call, from: 0x%x, expected: 0x%x, found: 0x%x",
+                    pc,
+                    pc + len(op),
+                    emu.getProgramCounter(),
+                )
+                # pc is undefined (emulation error)
+                raise StopEmulation
 
-            # hook handled it.
-            # pc is at instruction after call.
+            # some hook handled the tail call,
+            # pc is at call's return address.
             return False
 
         elif avoid_calls or emu.getVivTaint(target) or not emu.probeMemory(target, 0x1, v_mem.MM_EXEC):
@@ -521,15 +556,6 @@ class DebuggerEmulatorDriver(EmulatorDriver):
         finally:
             self.remove_monitor(mon)
 
-    class UntilVAMonitor(Monitor):
-        def __init__(self, va: int):
-            super().__init__()
-            self.va = va
-
-        def prehook(self, emu, op, pc):
-            if pc == self.va:
-                raise BreakpointHit(pc, reason="va")
-
     def run_to_va(self, va: int):
         """
         stepi until:
@@ -538,7 +564,7 @@ class DebuggerEmulatorDriver(EmulatorDriver):
           - given address reached (but not executed).
         raises the exception in any case.
         """
-        mon = self.UntilVAMonitor(va)
+        mon = UntilVAMonitor(va)
         self.add_monitor(mon)
 
         try:
@@ -697,10 +723,6 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
                 lastpc = emu.getProgramCounter()
                 seen.add(lastpc)
 
-                # if lastpc == 0x1000104D:
-                #    from IPython import embed; embed()
-                #    return
-
                 try:
                     does_fallthrough, branches = self.step()
                 except v_envi.UnsupportedInstruction:
@@ -728,6 +750,11 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
                     blockend = lastpc
                     for mon in self._monitors:
                         mon.postblock(self, blockstart, blockend)
+
+                    # stop emulating, and go to next block in the queue.
+                    break
+                except envi.exc.BreakpointHit:
+                    # emulation likely wandered off, e.g., into alignment (CC bytes)
 
                     # stop emulating, and go to next block in the queue.
                     break
@@ -797,3 +824,42 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
                         mon.postblock(self, blockstart, blockend)
 
                     break
+
+
+class SinglePathEmulatorDriver(FullCoverageEmulatorDriver):
+    """
+    an emulator that emulates the first path found to a target VA.
+    path is brute-forced via the full coverage emulator.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def run_to_va(self, va: int, tova: int):
+        """
+        explore from the given address up to an address, see run function
+        """
+        mon = UntilVAMonitor(tova)
+        self.add_monitor(mon)
+        try:
+            self.run(va)
+        except BreakpointHit as e:
+            if e.va != tova:
+                raise
+        finally:
+            self.remove_monitor(mon)
+
+
+def remove_default_viv_hooks(emu, allow_list=None):
+    """
+    vivisect comes with default emulation hooks (imphooks) that emulate
+     - API calls, e.g. GetProcAddress
+     - abstractions of library code functionality, e.g. _alloca_probe
+
+    in our testing there are inconsistencies in the hook implementation, e.g. around function returns
+    this function removes all imphooks except ones explicitly allowed
+    """
+    for hook_name in list(emu.hooks):
+        if allow_list and hook_name in allow_list:
+            continue
+        del emu.hooks[hook_name]

@@ -253,6 +253,7 @@ def test_dbg_driver_until_va(pma01):
 
 def test_fc_driver(pma01):
     emu = pma01.getEmulator()
+    vudrv.remove_default_viv_hooks(emu)
     drv = vudrv.FullCoverageEmulatorDriver(emu)
     cov = CoverageMonitor()
     drv.add_monitor(cov)
@@ -299,6 +300,7 @@ def test_fc_driver_rep(pma01):
 
     REPMAX = 0x70
     emu = pma01.getEmulator()
+    vudrv.remove_default_viv_hooks(emu)
     drv = vudrv.FullCoverageEmulatorDriver(emu, repmax=REPMAX)
     mon = LocalMonitor()
     drv.add_monitor(mon)
@@ -370,6 +372,7 @@ def test_dbg_driver_rep(pma01):
 
 def test_dbg_driver_maxhit(pma01):
     emu = pma01.getEmulator()
+    vudrv.remove_default_viv_hooks(emu)
     drv = vudrv.DebuggerEmulatorDriver(emu)
     cov = CoverageMonitor()
     drv.add_monitor(cov)
