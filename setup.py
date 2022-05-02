@@ -14,7 +14,7 @@ requirements = [
 
 setuptools.setup(
     name="viv_utils",
-    version="0.7.3",
+    version="0.7.4",
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",
