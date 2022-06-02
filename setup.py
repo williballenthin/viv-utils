@@ -5,8 +5,8 @@ import sys
 import setuptools
 
 requirements = [
-    "funcy==1.16",
-    "pefile==2021.9.3",
+    "funcy==1.17",
+    "pefile==2022.5.30",
     "vivisect==1.0.8",
     "intervaltree==3.1.0",
     "typing_extensions==4.2.0",
@@ -36,14 +36,14 @@ setuptools.setup(
             "python-flirt==0.7.0",
         ],
         "dev": [
-            "pytest==7.0.1",
+            "pytest==7.1.2",
             "pytest-sugar==0.9.4",
             "pytest-instafail==0.4.2",
             "pycodestyle==2.8.0",
             "black==22.3.0",
             "isort==5.10.1",
-            "mypy==0.940",
-            "types-setuptools==57.4.10",
+            "mypy==0.960",
+            "types-setuptools==57.4.17",
         ],
     },
     zip_safe=False,
