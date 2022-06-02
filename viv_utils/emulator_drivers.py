@@ -183,6 +183,10 @@ class EmulatorDriver(EmuHelperMixin):
     def is_ret(op):
         return bool(op.iflags & v_envi.IF_RET)
 
+    def is_function_or_tainted(self, va):
+        emu = self._emu
+        return emu.vw.isFunction(va) or emu.getVivTaint(va)
+
     def get_calling_convention(self, convname: Optional[str]):
         if convname:
             return self._emu.getCallingConvention(convname)
@@ -367,22 +371,22 @@ class EmulatorDriver(EmuHelperMixin):
             emu.executeOpcode(op)
         except envi.exc.SegmentationViolation as e:
             target = e.va
-            api = emu.getCallApi(pc)
-            if not api:
+            if not self.is_function_or_tainted(target):
                 # normal jump, but to invalid location
                 # let caller handle the exception
                 raise
         else:
             target = emu.getProgramCounter()
-            api = emu.getCallApi(pc)
-            if not api:
+            # before this we verified that emu.getCallApi() returns a value, however
+            # this returns a default API tuple for most addresses
+            if not self.is_function_or_tainted(target):
                 # normal jump, to valid location.
                 # emulation is complete.
                 # pc is at the destination of the jump.
                 return True
 
         # if we reach here, we're in a tail call,
-        # because there's an API found at this target address.
+        # because the target address is a function or tainted.
 
         if self._handle_hook():
             if emu.getProgramCounter() != pc + len(op):

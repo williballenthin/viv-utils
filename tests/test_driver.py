@@ -286,6 +286,54 @@ def test_fc_driver(pma01):
         assert va in cov.addresses
 
 
+def test_fc_driver_jmp_bb_ends(sample_038476):
+    emu = sample_038476.getEmulator()
+    vudrv.remove_default_viv_hooks(emu)
+    drv = vudrv.FullCoverageEmulatorDriver(emu)
+    cov = CoverageMonitor()
+    drv.add_monitor(cov)
+
+    # at the end of basic blocks there's a jump to the next block
+    # don't confuse this with a tail jump / API call and emulate the entire function
+    # with a fauly handle_jmp, emulation would end after the first basic block
+    #
+    # example snippit:
+    # .text:00401842 E9 04 00 00 00                    jmp     loc_40184B
+    # .text:00401847                   ; ---------------------------------------------------------------------------
+    # .text:00401847 9B                                wait
+    # .text:00401848 9B                                wait
+    # .text:00401849 9B                                wait
+    # .text:0040184A 9B                                wait
+    # .text:0040184B
+    # .text:0040184B                   loc_40184B:
+    # .text:0040184B E9 04 00 00 00                    jmp     loc_401854
+    # .text:00401850                   ; ---------------------------------------------------------------------------
+    # .text:00401850 9B                                wait
+    # .text:00401851 9B                                wait
+    # .text:00401852 9B                                wait
+    # .text:00401853 9B                                wait
+    # .text:00401854
+    # .text:00401854                   loc_401854:
+    # .text:00401854 C7 45 E8 00 00 00+                mov     [ebp+var_18], 0
+    drv.run(0x401830)
+
+    # these are a selection of random addresses from the function
+    # pulled from IDA manually.
+    for va in [
+        0x40184B,
+        0x40185B,
+        0x4019C2,
+        0x401A1D,
+        0x401A3C,
+        0x401A68,
+        0x401B96,
+        0x401C55,
+        0x401E79,
+        0x401ED2,
+    ]:
+        assert va in cov.addresses
+
+
 def test_fc_driver_rep(pma01):
     class LocalMonitor(vudrv.Monitor):
         """capture the value of ecx at 0x100010FA"""
