@@ -42,7 +42,7 @@ setuptools.setup(
             "pycodestyle==2.8.0",
             "black==22.6.0",
             "isort==5.10.1",
-            "mypy==0.971",
+            "mypy==0.991",
             "types-setuptools==62.6.0",
         ],
     },
