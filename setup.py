@@ -33,7 +33,7 @@ setuptools.setup(
     install_requires=requirements,
     extras_require={
         "flirt": [
-            "python-flirt==0.7.0",
+            "python-flirt==0.8.4",
         ],
         "dev": [
             "pytest==7.2.0",
