@@ -9,7 +9,7 @@ requirements = [
     "pefile==2022.5.30",
     "vivisect==1.0.8",
     "intervaltree==3.1.0",
-    "typing_extensions==4.2.0",
+    "typing_extensions==4.4.0",
 ]
 
 setuptools.setup(
