@@ -5,7 +5,7 @@ import sys
 import setuptools
 
 requirements = [
-    "funcy==1.17",
+    "funcy==1.18",
     "pefile==2022.5.30",
     "vivisect==1.0.8",
     "intervaltree==3.1.0",
