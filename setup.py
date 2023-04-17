@@ -36,7 +36,7 @@ setuptools.setup(
             "python-flirt==0.8.6",
         ],
         "dev": [
-            "pytest==7.3.0",
+            "pytest==7.3.1",
             "pytest-sugar==0.9.6",
             "pytest-instafail==0.4.2",
             "pycodestyle==2.10.0",
