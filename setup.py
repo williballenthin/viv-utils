@@ -7,7 +7,7 @@ import setuptools
 requirements = [
     "funcy==1.18",
     "pefile>=2023.2.7",
-    "vivisect==1.1.0",
+    "vivisect==1.1.1",
     "intervaltree==3.1.0",
     "typing_extensions==4.5.0",
 ]
