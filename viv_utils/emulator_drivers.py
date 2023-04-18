@@ -787,7 +787,6 @@ class FullCoverageEmulatorDriver(EmulatorDriver):
 
                     nextpc = emu.getProgramCounter()
                     if nextpc in seen:
-
                         if nextpc == lastpc:
                             # candidates:
                             #   - jump to self

@@ -93,7 +93,7 @@ def get_match_name(match):
     returns:
       str: the best name of the function matched by the given signature.
     """
-    for (name, type_, offset) in match.names:
+    for name, type_, offset in match.names:
         if offset == 0:
             return name
     raise ValueError("flirt: match: no best name: %s", match.names)
@@ -180,7 +180,7 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
             # then all the references have been validated.
             does_match_references = True
 
-            for (ref_name, _, ref_offset) in references:
+            for ref_name, _, ref_offset in references:
                 ref_va = va + ref_offset
 
                 # the reference offset may be inside an instruction,
@@ -194,7 +194,6 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
                 # if the name is found, then this flag will be set.
                 does_match_the_reference = False
                 for xref in vw.getXrefsFrom(loc_va):
-
                     if ref_name == ".":
                         # special case: reference named `.`
                         # which right now we interpret to mean "any data reference".
@@ -261,7 +260,7 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
     # first add local names, then we'll do public names
     # this way public names have precedence.
     # see: https://github.com/williballenthin/lancelot/issues/112#issuecomment-802221966
-    for (name, type_, offset) in match.names:
+    for name, type_, offset in match.names:
         if type_ != "local":
             continue
 
@@ -285,7 +284,7 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
             cache[va + offset] = name
             logger.debug("found local function name: 0x%x: %s", va + offset, name)
 
-    for (name, type_, offset) in match.names:
+    for name, type_, offset in match.names:
         if type_ != "public":
             continue
 
