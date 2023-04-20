@@ -95,7 +95,7 @@ def main():
 
             print("  references:")
 
-            for (ref_name, _, ref_offset) in references:
+            for ref_name, _, ref_offset in references:
                 ref_va = function + ref_offset
                 seen.add(ref_va)
 

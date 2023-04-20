@@ -5,16 +5,16 @@ import sys
 import setuptools
 
 requirements = [
-    "funcy==1.18",
+    "funcy>=2.0",
     "pefile>=2023.2.7",
-    "vivisect==1.1.0",
-    "intervaltree==3.1.0",
-    "typing_extensions==4.5.0",
+    "vivisect>=1.1.0",
+    "intervaltree>=3.1.0",
+    "typing_extensions>=4.5.0",
 ]
 
 setuptools.setup(
     name="viv_utils",
-    version="0.7.8",
+    version="0.7.9",
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",
@@ -36,11 +36,11 @@ setuptools.setup(
             "python-flirt==0.8.6",
         ],
         "dev": [
-            "pytest==7.3.0",
+            "pytest==7.3.1",
             "pytest-sugar==0.9.6",
             "pytest-instafail==0.4.2",
             "pycodestyle==2.10.0",
-            "black==22.12.0",
+            "black==23.3.0",
             "isort==5.11.5",  # last version supporting Python 3.7
             "mypy==1.2.0",
             "types-setuptools==67.6.0.7",
