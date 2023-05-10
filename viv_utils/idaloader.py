@@ -45,7 +45,7 @@ def is_x86():
     is the currently loaded module 32-bit x86?
     """
     inf = idaapi.get_inf_structure()
-    return inf.procName == "metapc" and inf.is_32bit() and not inf.is_64bit()
+    return inf.procname == "metapc" and inf.is_32bit() and not inf.is_64bit()
 
 
 @requires_ida
