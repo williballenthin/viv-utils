@@ -43,7 +43,7 @@ setuptools.setup(
             "black==23.3.0",
             "isort==5.11.5",  # last version supporting Python 3.7
             "mypy==1.2.0",
-            "types-setuptools==67.6.0.7",
+            "types-setuptools==67.7.0.2",
         ],
     },
     zip_safe=False,
