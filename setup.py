@@ -42,7 +42,7 @@ setuptools.setup(
             "pycodestyle==2.10.0",
             "black==23.3.0",
             "isort==5.11.5",  # last version supporting Python 3.7
-            "mypy==1.2.0",
+            "mypy==1.3.0",
             "types-setuptools==67.6.0.7",
         ],
     },
