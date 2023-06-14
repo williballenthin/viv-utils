@@ -186,10 +186,11 @@ def match_function_flirt_signatures(matcher, vw, va, cache=None):
                 # the reference offset may be inside an instruction,
                 # so we use getLocation to select the containing instruction address.
                 location = vw.getLocation(ref_va)
-                if location is not None:
-                    loc_va = location[vivisect.const.L_VA]
-                else:
-                    loc_va = None
+                if location is None:
+                    does_match_references = False
+                    break
+
+                loc_va = location[vivisect.const.L_VA]
 
                 # an instruction may have multiple xrefs from
                 # so we loop through all code references,
