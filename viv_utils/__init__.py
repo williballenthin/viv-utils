@@ -4,6 +4,7 @@ import struct
 import hashlib
 import logging
 import tempfile
+import textwrap
 from typing import Any, Dict, List, Tuple, Iterator
 
 import envi
@@ -727,3 +728,64 @@ def readMemoryCurrentSection(vw: Workspace, va: Address, size: int) -> bytes:
     if size > maxreadlen:
         size = maxreadlen
     return vw.readMemory(va, size)
+
+
+class hexdump:
+    # via: https://gist.github.com/NeatMonster/c06c61ba4114a2b31418a364341c26c0
+    def __init__(self, buf, off=0):
+        self.buf = buf
+        self.off = off
+
+    def __iter__(self):
+        last_bs, last_line = None, None
+        for i in range(0, len(self.buf), 16):
+            bs = bytearray(self.buf[i : i + 16])
+            line = "{:08x}  {:23}  {:23}  |{:16}|".format(
+                self.off + i,
+                " ".join(("{:02x}".format(x) for x in bs[:8])),
+                " ".join(("{:02x}".format(x) for x in bs[8:])),
+                "".join((chr(x) if 32 <= x < 127 else "." for x in bs)),
+            )
+            if bs == last_bs:
+                line = "*"
+            if bs != last_bs or line != last_line:
+                yield line
+            last_bs, last_line = bs, line
+        yield "{:08x}".format(self.off + len(self.buf))
+
+    def __str__(self):
+        return "\n".join(self)
+
+    def __repr__(self):
+        return "\n".join(self)
+
+
+def dump_emu_state(emu):
+    print(textwrap.dedent(f"""
+      eip: {emu.getRegisterByName('eip'):#08x}
+      eax: {emu.getRegisterByName('eax'):#08x}
+      ebx: {emu.getRegisterByName('ebx'):#08x}
+      ecx: {emu.getRegisterByName('ecx'):#08x}
+      edx: {emu.getRegisterByName('edx'):#08x}
+      esi: {emu.getRegisterByName('esi'):#08x}
+      edi: {emu.getRegisterByName('edi'):#08x}
+      esp: {emu.getRegisterByName('esp'):#08x}
+      ebp: {emu.getRegisterByName('ebp'):#08x}
+    """))
+
+    print("memory segments:")
+    for (va, size, flags, name) in emu.getMemoryMaps():
+        print(f"     {va:#08x}-{va+size:#08x} {flags}")
+    print()
+ 
+    # print a hex dump of everything between
+    # esp and ebp
+    esp = emu.getRegisterByName("esp")
+    ebp = emu.getRegisterByName("ebp")
+    size = ebp - esp
+    stack = emu.readMemory(esp, size)
+
+    print("stack:")
+
+    for line in hexdump(stack, esp):
+        print("     " + line)
