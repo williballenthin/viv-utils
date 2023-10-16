@@ -38,7 +38,7 @@ setuptools.setup(
         "dev": [
             "pytest==7.4.2",
             "pytest-sugar==0.9.6",
-            "pytest-instafail==0.4.2",
+            "pytest-instafail==0.5.0",
             "pycodestyle==2.10.0",
             "black==23.3.0",
             "isort==5.11.5",  # last version supporting Python 3.7
