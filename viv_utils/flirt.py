@@ -1,4 +1,3 @@
-import os
 import gzip
 import time
 import logging
@@ -44,6 +43,40 @@ def is_library_function(vw, va):
       bool: if the function is recognized as from a library.
     """
     return vw.funcmeta.get(va, {}).get(_LIBRARY_META_KEY, False)
+
+
+def is_library_called_function(vw, va):
+    """
+    is the given function only called from library functions?
+    if there's no function at the given address, `False` is returned.
+
+    args:
+        vw (vivisect.Workspace):
+        va (int): the virtual address of a function.
+
+    returns:
+        bool: True if the function is only called from library functions, False otherwise.
+    """
+    # check if the address is a function
+    if not vw.isFunction(va):
+        return False
+
+    # get all the references (calls) to the function
+    caller_vas = set(
+        vw.getFunction(xref[vivisect.const.XR_FROM]) for xref in vw.getXrefsTo(addr, rtype=vivisect.const.REF_CODE)
+    )
+
+    # if there are no references, return False (not called at all)
+    if not caller_vas:
+        return False
+
+    # check if all the references are from library functions
+    for caller_va in caller_vas:
+        if vw.isFunction(caller_va) and not is_library_function(vw, caller_va):
+            return False
+
+    # if we reach this point, all references are from library functions
+    return True
 
 
 def make_library_function(vw, va):
