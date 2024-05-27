@@ -14,7 +14,7 @@ requirements = [
 
 setuptools.setup(
     name="viv_utils",
-    version="0.7.9",
+    version="0.7.10",
     description="Utilities for binary analysis using vivisect.",
     long_description="Utilities for binary analysis using vivisect.",
     author="Willi Ballenthin",
@@ -33,7 +33,7 @@ setuptools.setup(
     install_requires=requirements,
     extras_require={
         "flirt": [
-            "python-flirt==0.8.8",
+            "python-flirt==0.8.10",
         ],
         "dev": [
             "pytest==7.4.2",
