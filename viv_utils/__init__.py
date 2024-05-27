@@ -761,7 +761,9 @@ class hexdump:
 
 
 def dump_emu_state(emu):
-    print(textwrap.dedent(f"""
+    print(
+        textwrap.dedent(
+            f"""
       eip: {emu.getRegisterByName('eip'):#08x}
       eax: {emu.getRegisterByName('eax'):#08x}
       ebx: {emu.getRegisterByName('ebx'):#08x}
@@ -771,13 +773,15 @@ def dump_emu_state(emu):
       edi: {emu.getRegisterByName('edi'):#08x}
       esp: {emu.getRegisterByName('esp'):#08x}
       ebp: {emu.getRegisterByName('ebp'):#08x}
-    """))
+    """
+        )
+    )
 
     print("memory segments:")
-    for (va, size, flags, name) in emu.getMemoryMaps():
+    for va, size, flags, name in emu.getMemoryMaps():
         print(f"     {va:#08x}-{va+size:#08x} {flags}")
     print()
- 
+
     # print a hex dump of everything between
     # esp and ebp
     esp = emu.getRegisterByName("esp")
