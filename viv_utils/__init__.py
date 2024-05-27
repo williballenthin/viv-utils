@@ -5,13 +5,13 @@ import hashlib
 import logging
 import tempfile
 import textwrap
+import importlib
 from typing import Any, Dict, List, Tuple, Iterator
 
 import envi
 import funcy
 import vivisect
 import intervaltree
-import pkg_resources
 import vivisect.const
 
 from viv_utils.types import *
@@ -53,8 +53,8 @@ def getVwSampleMd5(vw: Workspace) -> str:
 def getVivisectLibraryVersion() -> str:
     # ref: https://stackoverflow.com/questions/710609/checking-a-python-module-version-at-runtime
     try:
-        return pkg_resources.get_distribution("vivisect").version
-    except pkg_resources.DistributionNotFound:
+        return importlib.metadata.distribution("vivisect").version
+    except importlib.metadata.PackageNotFoundError:
         logger.debug("package does not include vivisect distribution")
     return "N/A"
 
