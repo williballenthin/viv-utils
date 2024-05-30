@@ -45,7 +45,7 @@ def is_library_function(vw, va):
     return vw.funcmeta.get(va, {}).get(_LIBRARY_META_KEY, False)
 
 
-def is_library_called_function(vw, va):
+def is_only_called_from_library_functions(vw, va, visited=None):
     """
     is the given function only called from library functions?
     if there's no function at the given address, `False` is returned.
@@ -61,6 +61,17 @@ def is_library_called_function(vw, va):
     if not vw.isFunction(va):
         return False
 
+    # initialize the visited set if not provided
+    if visited is None:
+        visited = set()
+
+    # avoid cycles (infinite loops): check if we've already visited this address
+    if va in visited:
+        return False
+
+    # mark the current address as visited
+    visited.add(va)
+
     # get all the references (calls) to the function
     caller_vas = set(
         vw.getFunction(xref[vivisect.const.XR_FROM]) for xref in vw.getXrefsTo(addr, rtype=vivisect.const.REF_CODE)
@@ -70,12 +81,14 @@ def is_library_called_function(vw, va):
     if not caller_vas:
         return False
 
-    # check if all the references are from library functions
+    # check if all the references are from library functions or are library-called
     for caller_va in caller_vas:
-        if vw.isFunction(caller_va) and not is_library_function(vw, caller_va):
+        if not is_library_function(vw, caller_va) and not is_only_called_from_library_functions(
+            vw, caller_va, visited.copy()
+        ):
             return False
 
-    # if we reach this point, all references are from library functions
+    # if we reach this point, all references are from library functions or are library-called
     return True
 
 
