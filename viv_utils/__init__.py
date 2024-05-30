@@ -5,7 +5,7 @@ import hashlib
 import logging
 import tempfile
 import textwrap
-import importlib
+import importlib.metadata
 from typing import Any, Dict, List, Tuple, Iterator
 
 import envi
