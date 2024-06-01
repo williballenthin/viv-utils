@@ -73,12 +73,12 @@ def is_only_called_from_library_functions(vw, va, visited=None):
     visited.add(va)
 
     # get all the references (calls) to the function
-    caller_vas = set(
+    caller_fvas = set(
         vw.getFunction(xref[vivisect.const.XR_FROM]) for xref in vw.getXrefsTo(va, rtype=vivisect.const.REF_CODE)
     )
 
     # if there are no references, return False (not called at all)
-    if not caller_vas:
+    if not caller_fvas:
         return False
 
     # check if all the references are from library functions or are library-called

@@ -22,12 +22,12 @@ def test_function_not_called(sample_038476):
     assert is_only_called_from_library_functions(sample_038476, func_addr) is False
 
 
-def test_positive(sample_038476):
+def test_library_function(sample_038476):
     """
     test a library function
     """
     # this is an existing library function
-    func_addr = 0x408155
+    func_addr = 0x407660
     make_library_function(sample_038476, func_addr)
     assert is_only_called_from_library_functions(sample_038476, func_addr) is False
 
@@ -36,7 +36,7 @@ def test_function_with_only_top_level_library_functions(sample_038476):
     """
     test a function whose top level callers are all library functions
     """
-    # this is a function, where all the top level references are library functions
+    # this is a function where all the top level references are library functions
     func_addr = 0x40CAA3
     top_level_func_addr1 = 0x408155
     top_level_func_addr2 = 0x403520
@@ -54,7 +54,7 @@ def test_function_with_mixed_top_level_callers(sample_038476):
     """
     test a function whose top level callers are both library functions and non-library functions
     """
-    # this is a function, where all the top level references are library functions
+    # this is a function where all the top level references are library functions
     func_addr = 0x40CAA3
     top_level_func_addr1 = 0x408155
     top_level_func_addr2 = 0x403520
