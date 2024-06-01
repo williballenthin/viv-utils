@@ -74,7 +74,7 @@ def is_only_called_from_library_functions(vw, va, visited=None):
 
     # get all the references (calls) to the function
     caller_vas = set(
-        vw.getFunction(xref[vivisect.const.XR_FROM]) for xref in vw.getXrefsTo(addr, rtype=vivisect.const.REF_CODE)
+        vw.getFunction(xref[vivisect.const.XR_FROM]) for xref in vw.getXrefsTo(va, rtype=vivisect.const.REF_CODE)
     )
 
     # if there are no references, return False (not called at all)
