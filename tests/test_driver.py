@@ -1,9 +1,9 @@
 import collections
 
 import envi.const
-import viv_utils.emulator_drivers as vudrv
-
 from fixtures import *
+
+import viv_utils.emulator_drivers as vudrv
 
 
 class LoggingMonitor(vudrv.Monitor):

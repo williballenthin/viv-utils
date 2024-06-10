@@ -1,24 +1,44 @@
-import vivisect.const as v_const
-from viv_utils.flirt import *
-
+import vivisect.const
 from fixtures import sample_038476
+
+from viv_utils.flirt import *
 
 
 def test_invalid_function(sample_038476):
     # this is an address that is not a function
-    assert is_only_called_from_library_functions(sample_038476, 0x400000) is False
+    func_addr = 0x400000
+    assert sample_038476.isFunction(func_addr) is False
+    assert is_only_called_from_library_functions(sample_038476, func_addr) is False
 
 
 def test_function_not_called(sample_038476):
     # this is a function that is not called by any other function
+    # 0x4010b0 is not called by any other function
+    func_addr = 0x4010B0
+    caller_fvas = set(
+        sample_038476.getFunction(xref[vivisect.const.XR_FROM])
+        for xref in sample_038476.getXrefsTo(func_addr, rtype=vivisect.const.REF_CODE)
+    )
+    assert caller_fvas == set()
     assert is_only_called_from_library_functions(sample_038476, 0x408155) is False
 
 
-def test_library_function(sample_038476):
-    # this is an existing library function
-    func_addr = 0x407660
-    make_library_function(sample_038476, func_addr)
-    assert is_only_called_from_library_functions(sample_038476, func_addr) is False
+# call graph of 0x40CAA3:
+#
+#     entry (0x4081155)
+#              |
+#              v
+#       FUN_407660   FUN_403520
+#              |        |
+#              v        v
+#       FUN_4027d0   FUN_404980
+#              \        /
+#               \      /
+#                v    v
+#              FUN_40ca76
+#                  |
+#                  v
+#              FUN_40caa3
 
 
 def test_only_called_from_library_functions(sample_038476):
@@ -26,6 +46,8 @@ def test_only_called_from_library_functions(sample_038476):
     func_addr = 0x40CAA3
     top_level_func_addr1 = 0x408155
     top_level_func_addr2 = 0x403520
+
+    assert is_library_function(sample_038476, func_addr) is False
 
     make_library_function(sample_038476, top_level_func_addr1)
     make_library_function(sample_038476, top_level_func_addr2)
@@ -37,7 +59,7 @@ def test_only_called_from_library_functions(sample_038476):
 
 
 def test_called_from_mixed_functions(sample_038476):
-    # this is a function where the top level callers are both library and non-library functions
+    # this is a function whose top level callers are both library and non-library functions
     func_addr = 0x40CAA3
     top_level_func_addr = 0x408155  # parent caller of 0x40CAA3
 
@@ -47,6 +69,27 @@ def test_called_from_mixed_functions(sample_038476):
     assert is_library_function(sample_038476, top_level_func_addr) is True
 
     assert is_only_called_from_library_functions(sample_038476, func_addr) is True
+
+
+# call graph of 0x40B06C:
+#
+#       FUN_407BF0 <--- FUN_407B3C
+#           |              ^
+#           v              |
+#       FUN_408294         |
+#           |              |
+#           v              |
+#       FUN_40832F ---> FUN_4084D6
+#                 \     /
+#                  \   /
+#                   v v
+#              FUN_40868F
+#                    |
+#                    v
+#               FUN_408840
+#                    |
+#                    v
+#               FUN_40b06C
 
 
 def test_function_circular_call_graph(sample_038476):
