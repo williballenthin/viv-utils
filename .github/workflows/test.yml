@@ -17,7 +17,9 @@ jobs:
       with:
         python-version: "3.8"
     - name: Install dependencies
-      run: pip install -e .[dev]
+      run: |
+        pip install -r requirements.txt
+        pip install -e .[dev,flirt]
     - name: Lint with isort
       run: isort --profile black --length-sort --line-width 120 -c .
     - name: Lint with black
@@ -53,6 +55,8 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install viv-utils
-      run: pip install -e .[dev]
+      run: |
+        pip install -r requirements.txt
+        pip install -e .[dev,flirt]
     - name: Run tests
       run: pytest -v tests/
