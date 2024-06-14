@@ -1,4 +1,5 @@
 black==24.4.2
+build==1.2.1
 click==8.1.7
 cxxfilt==0.2.2
 funcy==2.0
@@ -17,11 +18,12 @@ pyasn1==0.4.8
 pyasn1-modules==0.2.8
 pycodestyle==2.11.1
 pycparser==2.22
+pyproject-hooks==1.1.0
 pytest==8.2.2
 pytest-instafail==0.5.0
 pytest-sugar==0.9.6
 python-flirt==0.8.10
-setuptools==65.5.0
+setuptools==70.0.0
 sortedcontainers==2.4.0
 termcolor==2.4.0
 types-setuptools==70.0.0.20240524
