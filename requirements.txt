@@ -21,7 +21,7 @@ pycparser==2.22
 pyproject-hooks==1.1.0
 pytest==8.2.2
 pytest-instafail==0.5.0
-pytest-sugar==0.9.6
+pytest-sugar==1.0.0
 python-flirt==0.8.10
 setuptools==70.0.0
 sortedcontainers==2.4.0
