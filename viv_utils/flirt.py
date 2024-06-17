@@ -1,8 +1,8 @@
-import os
 import gzip
 import time
 import logging
 import contextlib
+from typing import Set, Optional
 
 import envi
 import flirt
@@ -28,7 +28,7 @@ def timing(msg):
     logger.debug("perf: %s: %0.2fs", msg, t1 - t0)
 
 
-def is_library_function(vw, va):
+def is_library_function(vw: vivisect.VivWorkspace, va: int) -> bool:
     """
     is the function at the given address a library function?
     this may be determined by a signature matching backend.
@@ -37,7 +37,7 @@ def is_library_function(vw, va):
     note: if its a library function, it should also have a name set.
 
     args:
-      vw (vivisect.Workspace):
+      vw (vivisect.VivWorkspace):
       va (int): the virtual address of a function.
 
     returns:
@@ -46,7 +46,56 @@ def is_library_function(vw, va):
     return vw.funcmeta.get(va, {}).get(_LIBRARY_META_KEY, False)
 
 
-def make_library_function(vw, va):
+def is_only_called_from_library_functions(
+    vw: vivisect.VivWorkspace, va: int, visited: Optional[Set[int]] = None
+) -> bool:
+    """
+    is the given function only called from library functions?
+    if there's no function at the given address, `False` is returned.
+
+    args:
+        vw (vivisect.VivWorkspace):
+        va (int): the virtual address of a function.
+
+    returns:
+        bool: True if the function is only called from library functions, False otherwise.
+    """
+    # check if the address is a function
+    if not vw.isFunction(va):
+        return False
+
+    # initialize the visited set if not provided
+    if visited is None:
+        visited = set()
+
+    # avoid cycles (infinite loops): check if we've already visited this address
+    if va in visited:
+        return False
+
+    # mark the current address as visited
+    visited.add(va)
+
+    # get all the references (calls) to the function
+    caller_fvas = set(
+        vw.getFunction(xref[vivisect.const.XR_FROM]) for xref in vw.getXrefsTo(va, rtype=vivisect.const.REF_CODE)
+    )
+
+    # if there are no references, return False (not called at all)
+    if not caller_fvas:
+        return False
+
+    # check if all the references are from library functions or are library-called
+    for caller_va in caller_fvas:
+        if not is_library_function(vw, caller_va) and not is_only_called_from_library_functions(
+            vw, caller_va, visited.copy()
+        ):
+            return False
+
+    # if we reach this point, all references are from library functions or are library-called
+    return True
+
+
+def make_library_function(vw: vivisect.VivWorkspace, va: int):
     """
     mark the function with the given address a library function.
     the associated accessor is `is_library_function`.
@@ -57,7 +106,7 @@ def make_library_function(vw, va):
     its up to the caller to do this part.
 
     args:
-      vw (vivisect.Workspace):
+      vw (vivisect.VivWorkspace):
       va (int): the virtual address of a function.
     """
     fmeta = vw.funcmeta.get(va, {})
@@ -70,7 +119,7 @@ def add_function_flirt_match(vw, va, name):
     the name overrides any existing function name.
 
     args:
-      vw (vivisect.Workspace):
+      vw (vivisect.VivWorkspace):
       va (int): the virtual address of a function.
       name (str): the name to assign to the function.
     """
