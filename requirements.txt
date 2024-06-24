@@ -1,7 +1,7 @@
 black==24.4.2
 build==1.2.1
 click==8.1.7
-cxxfilt==0.2.2
+cxxfilt==0.3.0
 funcy==2.0
 iniconfig==2.0.0
 intervaltree==3.1.0
