@@ -14,8 +14,8 @@ pefile==2023.2.7
 pip==24.0
 platformdirs==4.2.2
 pluggy==1.5.0
-pyasn1==0.6.0
-pyasn1-modules==0.4.0
+pyasn1==0.4.8
+pyasn1-modules==0.2.8
 pycodestyle==2.12.0
 pycparser==2.22
 pyproject-hooks==1.1.0
