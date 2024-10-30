@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "viv_utils"
-version="0.7.12"
+version="0.7.13"
 authors = [
     {name = "Willi Ballenthin", email = "william.ballenthin@mandiant.com"},
     {name = "Moritz Raabe", email = "moritz.raabe@mandiant.com"},
@@ -74,7 +74,7 @@ namespaces = false
 # These dependencies are not used in production environments
 # and should not conflict with other libraries/tooling.
 flirt = [
-    "python-flirt==0.8.10",
+    "python-flirt==0.9.0",
 ]
 dev = [
     "pytest==8.2.2",
