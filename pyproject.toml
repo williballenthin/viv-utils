@@ -69,13 +69,13 @@ include = ["viv_utils*"]
 namespaces = false
 
 [project.optional-dependencies]
+flirt = [
+    "python-flirt>=0.9.0",
+]
 # Dev and build dependencies are not relaxed because
 # we want all developer environments to be consistent.
 # These dependencies are not used in production environments
 # and should not conflict with other libraries/tooling.
-flirt = [
-    "python-flirt==0.9.0",
-]
 dev = [
     "pytest==8.2.2",
     "pytest-sugar==1.0.0",
