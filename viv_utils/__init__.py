@@ -779,7 +779,7 @@ def dump_emu_state(emu):
 
     print("memory segments:")
     for va, size, flags, name in emu.getMemoryMaps():
-        print(f"     {va:#08x}-{va+size:#08x} {flags}")
+        print(f"     {va:#08x}-{va + size:#08x} {flags}")
     print()
 
     # print a hex dump of everything between
