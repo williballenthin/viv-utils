@@ -62,7 +62,7 @@ def is_x64():
         procname = inf.procname
     except AttributeError:
         procname = ida_ida.inf_get_procname()
-    return procName == "metapc" and not ida_ida.inf_is_32bit_exactly() and ida_ida.inf_is_64bit()
+    return procname == "metapc" and not ida_ida.inf_is_32bit_exactly() and ida_ida.inf_is_64bit()
 
 
 @requires_ida
