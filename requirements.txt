@@ -6,7 +6,7 @@ funcy==2.0
 iniconfig==2.0.0
 intervaltree==3.1.0
 isort==5.13.2
-msgpack==1.0.8
+msgpack==1.1.0
 mypy==1.11.2
 packaging==24.1
 pathspec==0.12.1
