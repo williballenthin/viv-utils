@@ -132,6 +132,23 @@ def loadWorkspaceFromViv(vw: Workspace, viv_file):
         vw.loadWorkspace(viv_file)
 
 
+# name of the environment variable that opts in to loading cached `<input>.viv` files found next to an input file.
+#
+# .viv files are deserialized with pickle, which can execute arbitrary code.
+# an attacker who can place a file next to the input (like in an extracted archive
+# or a shared upload directory) could otherwise get code execution when the input is analyzed.
+# so, by default, `getWorkspace` ignores these files and analyzes the input from scratch.
+# set ALLOW_INSECURE_PICKLE=1 only when you trust every `.viv` file next to your inputs.
+ALLOW_INSECURE_PICKLE_ENV = "ALLOW_INSECURE_PICKLE"
+
+
+def isInsecurePickleAllowed() -> bool:
+    """
+    return True if the user opted in to loading cached `<input>.viv` files via ALLOW_INSECURE_PICKLE.
+    """
+    return os.environ.get(ALLOW_INSECURE_PICKLE_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def getWorkspace(fp: str, analyze=True, reanalyze=False, verbose=False, should_save=True) -> Workspace:
     """
     For a file path return a workspace, it will create one if the extension
@@ -139,8 +156,11 @@ def getWorkspace(fp: str, analyze=True, reanalyze=False, verbose=False, should_s
     it to create and save a new one.
 
     Warning: .viv files are deserialized with pickle, so only load trusted .viv files.
-    This includes an existing `<fp>.viv` file next to the input file.
-    Input files without the .viv extension are never loaded as workspaces.
+
+    When fp doesn't end with .viv, it is always parsed as a program (never as a workspace).
+    An existing `<fp>.viv` file next to it is only loaded when the environment variable
+    ALLOW_INSECURE_PICKLE=1 is set; otherwise it's ignored and fp is analyzed from scratch
+    (and, if should_save, `<fp>.viv` is overwritten with the new results).
     """
     vw = Workspace()
     vw.verbose = verbose
@@ -155,7 +175,15 @@ def getWorkspace(fp: str, analyze=True, reanalyze=False, verbose=False, should_s
             vw.analyze()
     else:
         viv_file = fp + ".viv"
-        if os.path.exists(viv_file):
+        load_viv_file = os.path.exists(viv_file) and isInsecurePickleAllowed()
+        if os.path.exists(viv_file) and not load_viv_file:
+            logger.info(
+                "ignoring existing workspace %s: loading .viv files uses pickle, set %s=1 to allow",
+                viv_file,
+                ALLOW_INSECURE_PICKLE_ENV,
+            )
+
+        if load_viv_file:
             loadWorkspaceFromViv(vw, viv_file)
             assertVwMatchesVivisectLibrary(vw)
             if reanalyze:
