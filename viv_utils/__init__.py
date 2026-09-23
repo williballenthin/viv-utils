@@ -32,6 +32,10 @@ class UnsupportedFormatError(ValueError):
     pass
 
 
+class InsecurePickleNotAllowedError(ValueError):
+    pass
+
+
 # file formats that we're willing to parse from an input file.
 #
 # vivisect's `Workspace.loadFromFile` sniffs the file header and,
@@ -132,19 +136,23 @@ def loadWorkspaceFromViv(vw: Workspace, viv_file):
         vw.loadWorkspace(viv_file)
 
 
-# name of the environment variable that opts in to loading cached `<input>.viv` files found next to an input file.
+# name of the environment variable that opts in to loading workspaces that viv-utils didn't explicitly get a .viv path for:
+#   - cached `<input>.viv` files found next to an input file (`getWorkspace`), and
+#   - serialized workspace bytes (`loadWorkspaceFromBytes` and `getWorkspaceFromBytes`).
 #
 # .viv files are deserialized with pickle, which can execute arbitrary code.
 # an attacker who can place a file next to the input (like in an extracted archive
-# or a shared upload directory) could otherwise get code execution when the input is analyzed.
-# so, by default, `getWorkspace` ignores these files and analyzes the input from scratch.
-# set ALLOW_INSECURE_PICKLE=1 only when you trust every `.viv` file next to your inputs.
+# or a shared upload directory) could otherwise get code execution when the input is analyzed,
+# and workspace bytes often come from caches, databases, or the network.
+# so, by default, `getWorkspace` ignores sibling .viv files and analyzes the input from scratch,
+# and the *FromBytes loaders raise InsecurePickleNotAllowedError.
+# set ALLOW_INSECURE_PICKLE=1 only when you trust every workspace that may be loaded this way.
 ALLOW_INSECURE_PICKLE_ENV = "ALLOW_INSECURE_PICKLE"
 
 
 def isInsecurePickleAllowed() -> bool:
     """
-    return True if the user opted in to loading cached `<input>.viv` files via ALLOW_INSECURE_PICKLE.
+    return True if the user opted in to loading pickled workspaces via ALLOW_INSECURE_PICKLE.
     """
     return os.environ.get(ALLOW_INSECURE_PICKLE_ENV, "").strip().lower() in ("1", "true", "yes", "on")
 
@@ -428,7 +436,14 @@ def loadWorkspaceFromBytes(vw: Workspace, buf: bytes):
     deserialize a vivisect workspace from a Python string/bytes.
 
     Warning: this uses pickle, so only load trusted data.
+    Requires the environment variable ALLOW_INSECURE_PICKLE=1,
+    otherwise raises InsecurePickleNotAllowedError.
     """
+    if not isInsecurePickleAllowed():
+        raise InsecurePickleNotAllowedError(
+            "refusing to load workspace from bytes: this uses pickle, set %s=1 to allow" % ALLOW_INSECURE_PICKLE_ENV
+        )
+
     _, temp_path = tempfile.mkstemp(suffix="viv")
     try:
         with open(temp_path, "wb") as f:
@@ -450,6 +465,8 @@ def getWorkspaceFromBytes(buf: bytes, analyze=True) -> Workspace:
       Python string/bytes.
 
     Warning: this uses pickle, so only load trusted data.
+    Requires the environment variable ALLOW_INSECURE_PICKLE=1,
+    otherwise raises InsecurePickleNotAllowedError.
     """
     vw = Workspace()
     vw.verbose = True
