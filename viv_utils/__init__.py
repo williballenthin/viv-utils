@@ -13,6 +13,7 @@ import funcy
 import vivisect
 import intervaltree
 import vivisect.const
+import vivisect.parsers
 
 from viv_utils.types import *
 from viv_utils.idaloader import loadWorkspaceFromIdb
@@ -25,6 +26,48 @@ SHELLCODE_BASE = 0x690000
 
 class IncompatibleVivVersion(ValueError):
     pass
+
+
+class UnsupportedFormatError(ValueError):
+    pass
+
+
+# file formats that we're willing to parse from an input file.
+#
+# vivisect's `Workspace.loadFromFile` sniffs the file header and,
+# if it looks like a serialized workspace ("viv" or "mpviv"),
+# loads it via `Workspace.loadWorkspace` rather than parsing it as a program.
+# the "viv" format (vivisect.storage.basicfile) is a pickle,
+# so an untrusted input file that starts with `VIV` leads to code execution.
+#
+# so, when loading an input file, we only accept program formats
+# and pass the format explicitly to vivisect so it can't pick a workspace loader.
+# this is an allowlist, so any new format recognized by vivisect is rejected until reviewed here.
+# to load a workspace, use a path with the .viv extension (see `getWorkspace`).
+SUPPORTED_INPUT_FORMATS = {"pe", "elf", "macho", "cgc", "ihex", "srec", "blob"}
+
+
+def guessInputFormat(fp: str) -> str:
+    """
+    guess the vivisect format name of the given program file, like "pe" or "elf".
+
+    raises UnsupportedFormatError if the file is not a program vivisect can parse,
+    such as a serialized vivisect workspace.
+    """
+    fmt = vivisect.parsers.guessFormatFilename(fp)
+    if fmt not in SUPPORTED_INPUT_FORMATS:
+        raise UnsupportedFormatError(
+            "'%s' has unsupported format '%s' (serialized workspaces must use the .viv extension)" % (fp, fmt)
+        )
+    return fmt
+
+
+def loadInputFile(vw: Workspace, fp: str, baseaddr=None) -> str:
+    """
+    load the given program file into the workspace, like `Workspace.loadFromFile`,
+    but never deserialize a vivisect workspace, which may execute code via pickle.
+    """
+    return vw.loadFromFile(fp, fmtname=guessInputFormat(fp), baseaddr=baseaddr)
 
 
 def getVwFirstMeta(vw: Workspace) -> Dict[str, Any]:
@@ -89,11 +132,35 @@ def loadWorkspaceFromViv(vw: Workspace, viv_file):
         vw.loadWorkspace(viv_file)
 
 
+# name of the environment variable that opts in to loading cached `<input>.viv` files found next to an input file.
+#
+# .viv files are deserialized with pickle, which can execute arbitrary code.
+# an attacker who can place a file next to the input (like in an extracted archive
+# or a shared upload directory) could otherwise get code execution when the input is analyzed.
+# so, by default, `getWorkspace` ignores these files and analyzes the input from scratch.
+# set ALLOW_INSECURE_PICKLE=1 only when you trust every `.viv` file next to your inputs.
+ALLOW_INSECURE_PICKLE_ENV = "ALLOW_INSECURE_PICKLE"
+
+
+def isInsecurePickleAllowed() -> bool:
+    """
+    return True if the user opted in to loading cached `<input>.viv` files via ALLOW_INSECURE_PICKLE.
+    """
+    return os.environ.get(ALLOW_INSECURE_PICKLE_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def getWorkspace(fp: str, analyze=True, reanalyze=False, verbose=False, should_save=True) -> Workspace:
     """
     For a file path return a workspace, it will create one if the extension
     is not .viv, otherwise it will load the existing one. Reanalyze will cause
     it to create and save a new one.
+
+    Warning: .viv files are deserialized with pickle, so only load trusted .viv files.
+
+    When fp doesn't end with .viv, it is always parsed as a program (never as a workspace).
+    An existing `<fp>.viv` file next to it is only loaded when the environment variable
+    ALLOW_INSECURE_PICKLE=1 is set; otherwise it's ignored and fp is analyzed from scratch
+    (and, if should_save, `<fp>.viv` is overwritten with the new results).
     """
     vw = Workspace()
     vw.verbose = verbose
@@ -108,14 +175,22 @@ def getWorkspace(fp: str, analyze=True, reanalyze=False, verbose=False, should_s
             vw.analyze()
     else:
         viv_file = fp + ".viv"
-        if os.path.exists(viv_file):
+        load_viv_file = os.path.exists(viv_file) and isInsecurePickleAllowed()
+        if os.path.exists(viv_file) and not load_viv_file:
+            logger.info(
+                "ignoring existing workspace %s: loading .viv files uses pickle, set %s=1 to allow",
+                viv_file,
+                ALLOW_INSECURE_PICKLE_ENV,
+            )
+
+        if load_viv_file:
             loadWorkspaceFromViv(vw, viv_file)
             assertVwMatchesVivisectLibrary(vw)
             if reanalyze:
                 setVwVivisectLibraryVersion(vw)
                 vw.analyze()
         else:
-            vw.loadFromFile(fp)
+            loadInputFile(vw, fp)
             setVwVivisectLibraryVersion(vw)
             if analyze:
                 vw.analyze()
@@ -351,6 +426,9 @@ def saveWorkspaceToBytes(vw: Workspace) -> bytes:
 def loadWorkspaceFromBytes(vw: Workspace, buf: bytes):
     """
     deserialize a vivisect workspace from a Python string/bytes.
+
+    Warning: the workspace is deserialized with pickle, which can execute arbitrary code.
+    The workspace bytes must be trusted; never pass data from an untrusted source.
     """
     _, temp_path = tempfile.mkstemp(suffix="viv")
     try:
@@ -371,6 +449,9 @@ def getWorkspaceFromBytes(buf: bytes, analyze=True) -> Workspace:
     """
     create a new vivisect workspace and load it from a
       Python string/bytes.
+
+    Warning: the workspace is deserialized with pickle, which can execute arbitrary code.
+    The workspace bytes must be trusted; never pass data from an untrusted source.
     """
     vw = Workspace()
     vw.verbose = True
@@ -385,12 +466,13 @@ def getWorkspaceFromBytes(buf: bytes, analyze=True) -> Workspace:
 
 def getWorkspaceFromFile(filepath: str, analyze=True) -> Workspace:
     """
-    deserialize a file into a new vivisect workspace.
+    parse a program file into a new vivisect workspace.
+    this never loads serialized vivisect workspaces.
     """
     vw = Workspace()
     vw.verbose = True
     vw.config.viv.parsers.pe.nx = True
-    vw.loadFromFile(filepath)
+    loadInputFile(vw, filepath)
     setVwVivisectLibraryVersion(vw)
     if analyze:
         setVwVivisectLibraryVersion(vw)
